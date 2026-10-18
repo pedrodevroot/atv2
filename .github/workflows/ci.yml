@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualidade:
+    name: Qualidade (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:unit
+
+  integracao:
+    name: Integração e cobertura (ubuntu-24.04 + PostgreSQL 18)
+    runs-on: ubuntu-24.04
+    needs: qualidade
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: recomendacao
+          POSTGRES_PASSWORD: recomendacao
+          POSTGRES_DB: cinebridge_recomendacao
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U recomendacao -d cinebridge_recomendacao"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: recomendacao
+      DB_PASSWORD: recomendacao
+      DB_NAME: cinebridge_recomendacao
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run migration:run
+      - run: npm run seed
+      - name: Testes com cobertura mínima de 80% (reprova o PR abaixo disso)
+        run: npm run coverage
+      - name: Resumo da cobertura
+        if: always()
+        run: |
+          node -e "const r=require('./coverage/coverage-summary.json').total;const l=['| Métrica | % |','| --- | --- |',...['lines','statements','functions','branches'].map(k=>'| '+k+' | '+r[k].pct+' |')];console.log('## Cobertura\n\n'+l.join('\n'))" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cobertura
+          path: coverage
+
+  docker:
+    name: Stack Docker (Postgres compartilhado + microsserviço)
+    runs-on: ubuntu-24.04
+    needs: qualidade
+    steps:
+      - uses: actions/checkout@v5
+      - run: cp .env.example .env
+      - run: docker compose up -d --build --wait
+      - name: Health check pelo host
+        run: curl -fsS http://localhost:3000/health | tee health.json | grep -q '"postgres":"disponivel"'
+      - name: Banco isolado do microsserviço
+        run: |
+          docker exec cinebridge-postgres psql -U postgres -At \
+            -c "select pg_get_userbyid(datdba) from pg_database where datname = 'cinebridge_recomendacao'" \
+            | grep -qx recomendacao
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v
