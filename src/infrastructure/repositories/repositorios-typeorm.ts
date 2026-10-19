@@ -55,6 +55,33 @@ export class RepositorioConvitesTypeorm implements RepositorioConvites {
     );
     return linha ? paraConvite(linha) : undefined;
   }
+
+  async expirarVencidos(agora: Date): Promise<Convite[]> {
+    const linhas = await this.dataSource.query<ConviteRow[]>(
+      `WITH expirados AS (
+         UPDATE convite SET status = $1
+          WHERE status = $2 AND expira_em <= $3
+         RETURNING *)
+       SELECT * FROM expirados ORDER BY criado_em, id`,
+      [StatusConvite.EXPIRADO, StatusConvite.PENDENTE, agora],
+    );
+    return linhas.map(paraConvite);
+  }
+
+  async cancelarPendentesDasEquipes(equipeIds: readonly string[]): Promise<Convite[]> {
+    if (equipeIds.length === 0) {
+      return [];
+    }
+    const linhas = await this.dataSource.query<ConviteRow[]>(
+      `WITH cancelados AS (
+         UPDATE convite SET status = $1
+          WHERE status = $2 AND equipe_id = ANY($3::text[])
+         RETURNING *)
+       SELECT * FROM cancelados ORDER BY criado_em, id`,
+      [StatusConvite.CANCELADO, StatusConvite.PENDENTE, [...equipeIds]],
+    );
+    return linhas.map(paraConvite);
+  }
 }
 
 export class RepositorioRecomendacoesTypeorm implements RepositorioRecomendacoes {

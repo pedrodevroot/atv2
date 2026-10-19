@@ -37,7 +37,7 @@ export class CaixaMensagensMemoria implements CaixaMensagens {
   }
 
   mensagensDe(destinatarioId: string): readonly Notificacao[] {
-    return this.porDestinatario.get(destinatarioId)?.todos ?? [];
+    return [...(this.porDestinatario.get(destinatarioId)?.todos ?? [])].reverse();
   }
 }
 

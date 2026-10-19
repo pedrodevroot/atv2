@@ -14,4 +14,5 @@ export interface Sujeito {
   adicionarObservador(observador: Observador): void;
   removerObservador(observador: Observador): void;
   notificarObservadores(evento: EventoRecomendacao): void;
+  notificarObservador(observador: Observador, evento: EventoRecomendacao): void;
 }

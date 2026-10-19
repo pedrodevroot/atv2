@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { OrquestradorPadrao } from '../../../src/application/orchestration/orquestrador-padrao.js';
 import { AuditoriaRecomendacao } from '../../../src/application/observers/auditoria-recomendacao.js';
 import type { Observador } from '../../../src/application/ports/observador.js';
 import { SistemaRecomendacao } from '../../../src/application/sistema-recomendacao.js';
@@ -7,18 +6,22 @@ import { criarCanaisSaida } from '../../../src/container.js';
 import { Papel } from '../../../src/domain/enums/papel.js';
 import { BarramentoEventosEmMemoria } from '../../../src/infrastructure/messaging/barramento-eventos-memoria.js';
 import { criarProjetoDemonstracao } from '../../fixtures/cadastro-demonstracao.js';
+import { criarFabricas } from '../../fixtures/fabricas.js';
 import { criarAmbienteOrquestracao, relogioFixo } from '../../fixtures/orquestracao.js';
 
 function criarSistema() {
   const { repositorio, registro, parametros } = criarAmbienteOrquestracao();
   const barramento = new BarramentoEventosEmMemoria();
+  const canais = criarCanaisSaida();
   const sistema = new SistemaRecomendacao({
-    orquestrador: new OrquestradorPadrao(repositorio, relogioFixo),
+    repositorio,
+    fabricas: criarFabricas(canais.caixa),
     estrategias: registro,
     sujeito: barramento,
     parametros,
+    relogio: relogioFixo,
   });
-  return { sistema, barramento, registro };
+  return { sistema, barramento, registro, canais };
 }
 
 describe('SistemaRecomendacao (classe do diagrama)', () => {
@@ -29,7 +32,7 @@ describe('SistemaRecomendacao (classe do diagrama)', () => {
         Papel.DIRETOR,
       )?.profissional.nome;
 
-    expect(sistema.estrategia.nome).toBe('similaridade-cosseno');
+    expect(sistema.estrategia).toBeUndefined();
     expect(await diretor()).toBe('Helena Técnica');
 
     sistema.definirEstrategia('regras-orcamento');
@@ -37,6 +40,20 @@ describe('SistemaRecomendacao (classe do diagrama)', () => {
 
     sistema.definirEstrategia(registro.obter('filtragem-colaborativa'));
     expect(await diretor()).toBe('Marta Consagrada');
+  });
+
+  it('sem estratégia escolhida usa o recomendador fabricado para o tipo do projeto', async () => {
+    const { sistema } = criarSistema();
+    sistema.definirEstrategia('regras-orcamento');
+    sistema.usarEstrategiaDoTipo();
+
+    const resultado = await sistema.executarRecomendacao(
+      criarProjetoDemonstracao('recomendador-ficcao'),
+    );
+
+    expect(sistema.estrategia).toBeUndefined();
+    expect(resultado.estrategia).toBe('recomendador-ficcao');
+    expect(resultado.equipes[0]?.membro(Papel.DIRETOR)?.profissional.nome).toBe('Helena Técnica');
   });
 
   it('notifica os observadores adicionados a cada recomendação gerada', async () => {

@@ -23,6 +23,21 @@ export class RepositorioConvitesMemoria implements RepositorioConvites {
       ),
     );
   }
+
+  expirarVencidos(agora: Date): Promise<Convite[]> {
+    return Promise.resolve([...this.convites.values()].filter((convite) => convite.expirar(agora)));
+  }
+
+  cancelarPendentesDasEquipes(equipeIds: readonly string[]): Promise<Convite[]> {
+    const alvos = new Set(equipeIds);
+    const cancelados = [...this.convites.values()].filter(
+      (convite) => alvos.has(convite.equipeId) && convite.pendente,
+    );
+    for (const convite of cancelados) {
+      convite.cancelar();
+    }
+    return Promise.resolve(cancelados);
+  }
 }
 
 export class RepositorioRecomendacoesMemoria implements RepositorioRecomendacoes {

@@ -14,7 +14,7 @@ import { ranquearPorPapel } from './ranqueador.js';
 export class SimilaridadeCosseno implements EstrategiaRecomendacao {
   readonly nome = NomeEstrategia.SIMILARIDADE_COSSENO;
   readonly descricao =
-    'Compara o vetor de competências do profissional com o perfil ideal do papel para o tipo de captação.';
+    'Compara o vetor de competências do profissional com o perfil ideal do papel.';
 
   constructor(
     private readonly catalogo: CatalogoPerfis = new CatalogoPerfis(),
@@ -35,7 +35,7 @@ export class SimilaridadeCosseno implements EstrategiaRecomendacao {
       filtros: this.filtros,
       folgaTeto: parametros.folgaTetoPapel,
       avaliadorPara: ({ papel }) => {
-        const perfilIdeal = this.catalogo.perfilPara(papel, projeto.tipoCaptacao);
+        const perfilIdeal = this.catalogo.perfilPara(papel);
         const componentes = (profissional: Profissional) => {
           const similaridade = perfilIdeal.similaridadeCosseno(profissional.vetorCompetencias);
           const aderencia = profissional.vetorCompetencias.aderenciaA(perfilIdeal);

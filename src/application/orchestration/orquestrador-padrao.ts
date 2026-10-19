@@ -7,6 +7,7 @@ import type { CandidatoRanqueado, RankingPorPapel } from '../strategies/estrateg
 import {
   OrquestradorEquipe,
   type EntradaOrquestracao,
+  type EntradaResolvida,
   type ResultadoMontagem,
 } from './orquestrador-equipe.js';
 
@@ -55,7 +56,7 @@ export class OrquestradorPadrao extends OrquestradorEquipe {
   }
 
   protected montarEquipes(
-    { projeto, estrategia, parametros }: EntradaOrquestracao,
+    { projeto, estrategia, parametros }: EntradaResolvida<EntradaOrquestracao>,
     ranking: RankingPorPapel,
     rodada: number,
   ): ResultadoMontagem {

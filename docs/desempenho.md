@@ -26,6 +26,7 @@ O cenário é pessimista: em produção o gerador de carga não divide a CPU com
 - **RNF01 (< 2 s com 10 mil profissionais):** uma recomendação isolada leva 0,27 s; na rajada de 100 simultâneas todas terminam abaixo de 2 s.
 - **RNF02 (100 requisições simultâneas):** 100 conexões mantidas por 30 s sem nenhum erro, timeout ou resposta não-2xx; p99 de 1,76 s.
 - Com 100 requisições sempre em andamento, a latência média segue a Lei de Little: 100 / 87 req/s ≈ 1,1 s, que é o valor medido.
+- **Depois da ATVII**, no mesmo ambiente e com o cache aquecido: requisição isolada de 0,26 s a 0,31 s; rajada de 100 simultâneas com p50 de 0,82 s a 0,89 s, máximo de 0,89 s a 0,95 s e 0 erros. Medições feitas enquanto outros containers disputavam a CPU chegaram a 2,7 s, o que mostra que o resultado depende da carga da máquina.
 
 ## Como chegamos lá
 
@@ -60,13 +61,17 @@ O estado do cache e do disjuntor aparece em `GET /health` como a dependência `c
 
 `npm run precisao` mede a **precision@5**: para 20 projetos sintéticos × 6 papéis, os relevantes são os 10% mais qualificados entre os candidatos elegíveis, segundo a qualidade latente usada pelo gerador do cadastro (o "gabarito" que o sistema não enxerga).
 
+Medição refeita depois da ATVII, que incluiu o tipo `PUBLICITARIO` no cadastro gerado e
+passou os ajustes de perfil por tipo para o recomendador de cada família:
+
 | Configuração                                                | precision@5 |
 | ----------------------------------------------------------- | ----------- |
 | Linha de base (aleatória)                                   | 0,227       |
-| similaridade-cosseno, versão original (só direção do vetor) | 0,044       |
-| **similaridade-cosseno com aderência (padrão atual)**       | **0,430**   |
-| filtragem-colaborativa (padrão)                             | **0,837**   |
-| filtragem-colaborativa (priori fraca)                       | 0,697       |
+| **recomendador do tipo do projeto (padrão da ATVII)**       | **0,457**   |
+| similaridade-cosseno genérica, com aderência                | 0,427       |
+| similaridade-cosseno, versão original (só direção do vetor) | 0,034       |
+| filtragem-colaborativa (padrão)                             | **0,852**   |
+| filtragem-colaborativa (priori fraca)                       | 0,703       |
 | regras-orcamento (padrão)                                   | 0,360       |
 | regras-orcamento (prioriza nota)                            | 0,590       |
 

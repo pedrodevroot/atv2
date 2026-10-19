@@ -2,7 +2,7 @@ import { OrquestradorPadrao } from '../../src/application/orchestration/orquestr
 import type { Equipe } from '../../src/domain/entidades/equipe.js';
 import type { Projeto } from '../../src/domain/entidades/projeto.js';
 import { criarProjetoDemonstracao } from './cadastro-demonstracao.js';
-import { criarAmbienteOrquestracao, relogioFixo } from './orquestracao.js';
+import { criarAmbienteOrquestracao, fabricaFiccao, relogioFixo } from './orquestracao.js';
 
 export interface ArvoreProjeto {
   readonly projeto: Projeto;
@@ -13,7 +13,11 @@ export interface ArvoreProjeto {
 export async function criarArvoreProjeto(): Promise<ArvoreProjeto> {
   const ambiente = criarAmbienteOrquestracao();
   const projeto = criarProjetoDemonstracao();
-  const resultado = await new OrquestradorPadrao(ambiente.repositorio, relogioFixo).orquestrar({
+  const resultado = await new OrquestradorPadrao(
+    ambiente.repositorio,
+    fabricaFiccao,
+    relogioFixo,
+  ).orquestrar({
     projeto,
     estrategia: ambiente.cosseno,
     parametros: ambiente.parametros,

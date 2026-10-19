@@ -31,6 +31,7 @@ export class GeradorRelatorio implements VisitanteProjeto<string> {
       '',
       `- Produtor: ${projeto.produtorId}`,
       `- Gênero / captação: ${projeto.genero} / ${projeto.tipoCaptacao}`,
+      ...linhaDetalhes(projeto),
       `- Duração: ${projeto.duracaoMinutos} min`,
       `- Orçamento: ${formatarMoeda(projeto.orcamento)}`,
       `- Período: ${formatarData(projeto.periodo.inicio)} a ${formatarData(projeto.dataEntrega)}`,
@@ -86,6 +87,14 @@ export class GeradorRelatorio implements VisitanteProjeto<string> {
         : `nota ${profissional.notaMedia.toFixed(1)} (${profissional.totalAvaliacoes} avaliações)`;
     return `${profissional.localizacao.cidade}/${profissional.localizacao.uf}; ${nota}; ${profissional.historico.length} projeto(s) no histórico`;
   }
+}
+
+function linhaDetalhes(projeto: Projeto): string[] {
+  const detalhes = Object.entries(projeto.detalhes).map(
+    ([campo, valor]) =>
+      `${campo}: ${Array.isArray(valor) ? valor.join(', ') || '-' : String(valor)}`,
+  );
+  return detalhes.length === 0 ? [] : [`- Detalhes do tipo: ${detalhes.join('; ')}`];
 }
 
 export function gerarRelatorio(projeto: Projeto, geradoEm?: Date): string {

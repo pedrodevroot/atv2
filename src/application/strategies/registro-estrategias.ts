@@ -1,4 +1,3 @@
-import type { Projeto } from '../../domain/entidades/projeto.js';
 import { ErroAplicacao } from '../erros/erro-aplicacao.js';
 import { NomeEstrategia, type EstrategiaRecomendacao } from './estrategia-recomendacao.js';
 import type { ParametrosRecomendacao } from './parametros-recomendacao.js';
@@ -41,13 +40,13 @@ export class RegistroEstrategias {
     return estrategia;
   }
 
-  resolver(projeto: Projeto, solicitadaPeloProdutor?: string): EstrategiaRecomendacao {
-    return this.obter(solicitadaPeloProdutor ?? projeto.estrategia);
-  }
-
-  sugerirPara(orcamento: number, parametros: ParametrosRecomendacao): string {
+  sugerirPara(
+    orcamento: number,
+    parametros: ParametrosRecomendacao,
+    padrao: string = NomeEstrategia.SIMILARIDADE_COSSENO,
+  ): string {
     return orcamento <= parametros.orcamento.limiteOrcamentoReduzido
       ? NomeEstrategia.REGRAS_ORCAMENTO
-      : NomeEstrategia.SIMILARIDADE_COSSENO;
+      : padrao;
   }
 }

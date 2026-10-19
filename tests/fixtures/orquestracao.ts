@@ -8,6 +8,9 @@ import { criarRegistroEstrategias } from '../../src/container.js';
 import { RepositorioProfissionaisMemoria } from '../../src/infrastructure/repositories/repositorio-profissionais-memoria.js';
 import { criarCadastroDemonstracao } from './cadastro-demonstracao.js';
 import { SAO_PAULO, criarProfissional } from './dominio.js';
+import { fabricaFiccao, fabricasTeste } from './fabricas.js';
+
+export { fabricaFiccao };
 
 export const AGORA = new Date('2026-09-27T12:00:00.000Z');
 export const relogioFixo: Relogio = () => new Date(AGORA.getTime());
@@ -35,6 +38,8 @@ export function criarAmbienteOrquestracao(cadastroExtra: readonly Profissional[]
   return {
     repositorio,
     registro,
+    fabricas: fabricasTeste,
+    fabrica: fabricaFiccao,
     parametros: resolverParametros(),
     cosseno: registro.obter('similaridade-cosseno'),
   };

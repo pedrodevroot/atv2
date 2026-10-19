@@ -1,4 +1,25 @@
+import { NOTA_MAXIMA, NOTA_MINIMA } from '../../domain/entidades/avaliacao.js';
+import { ORCAMENTO_MAXIMO } from '../../domain/entidades/projeto.js';
 import { ErroAplicacao } from '../erros/erro-aplicacao.js';
+
+export const VALOR_MAXIMO_PARAMETRO = 1_000_000;
+
+interface Limite {
+  readonly minimo: number;
+  readonly maximo: number;
+  readonly inteiro?: boolean;
+}
+
+const LIMITE_PADRAO: Limite = { minimo: 0, maximo: VALOR_MAXIMO_PARAMETRO };
+
+const LIMITES = new Map<string, Limite>([
+  ['topN', { minimo: 1, maximo: 100, inteiro: true }],
+  ['colaborativa.mediaPriori', { minimo: NOTA_MINIMA, maximo: NOTA_MAXIMA }],
+  ['orcamento.limiteOrcamentoReduzido', { minimo: 0, maximo: ORCAMENTO_MAXIMO }],
+  ['orquestracao.numeroSugestoes', { minimo: 1, maximo: 10, inteiro: true }],
+  ['orquestracao.scoreMinimo', { minimo: 0, maximo: 1 }],
+  ['orquestracao.custoMinimoPorPapel', { minimo: 0, maximo: ORCAMENTO_MAXIMO }],
+]);
 
 export interface ParametrosCosseno {
   pesoSimilaridade: number;
@@ -98,28 +119,21 @@ export function resolverParametros(
 
 function validarParametros(parametros: ParametrosRecomendacao): void {
   const problemas: string[] = [];
-  const inteirosEntre: [string, number, number, number][] = [
-    ['topN', parametros.topN, 1, 100],
-    ['orquestracao.numeroSugestoes', parametros.orquestracao.numeroSugestoes, 1, 10],
-  ];
-  for (const [nome, valor, minimo, maximo] of inteirosEntre) {
-    if (!Number.isInteger(valor) || valor < minimo || valor > maximo) {
-      problemas.push(`${nome} deve ser inteiro entre ${minimo} e ${maximo}`);
-    }
-  }
-  if (parametros.orquestracao.scoreMinimo > 1) {
-    problemas.push('orquestracao.scoreMinimo deve ser <= 1');
-  }
-  const numeros: [string, number][] = [
+  const valores: [string, number][] = [
+    ['topN', parametros.topN],
     ['folgaTetoPapel', parametros.folgaTetoPapel],
     ...prefixar('cosseno', parametros.cosseno),
     ...prefixar('colaborativa', parametros.colaborativa),
     ...prefixar('orcamento', parametros.orcamento),
     ...prefixar('orquestracao', parametros.orquestracao),
   ];
-  for (const [nome, valor] of numeros) {
-    if (!Number.isFinite(valor) || valor < 0) {
-      problemas.push(`${nome} deve ser um número >= 0`);
+  for (const [nome, valor] of valores) {
+    const { minimo, maximo, inteiro = false } = LIMITES.get(nome) ?? LIMITE_PADRAO;
+    const numerico = inteiro ? Number.isInteger(valor) : Number.isFinite(valor);
+    if (!numerico || valor < minimo || valor > maximo) {
+      problemas.push(
+        `${nome} deve ser ${inteiro ? 'inteiro' : 'um número'} entre ${minimo} e ${maximo}`,
+      );
     }
   }
   const somasDePesos: [string, number][] = [

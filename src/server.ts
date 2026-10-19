@@ -2,6 +2,7 @@ import cluster from 'node:cluster';
 import { construirApp } from './app.js';
 import { carregarArquivoEnv, carregarConfig } from './config/config.js';
 import { criarContainer } from './container.js';
+import { agendarVarredura } from './infrastructure/agendamento/varredura-periodica.js';
 import { criarLogger } from './infrastructure/logging/opcoes-logger.js';
 
 carregarArquivoEnv();
@@ -10,7 +11,16 @@ const logger = criarLogger(config);
 const container = criarContainer(config, logger);
 const app = await construirApp(container, { logger });
 
+const varreduraConvites = agendarVarredura(
+  () => container.casos.expirarConvites.executar({}),
+  config.convites.varreduraMs,
+  (erro) => {
+    app.log.warn({ err: erro }, 'Falha ao expirar convites vencidos');
+  },
+);
+
 app.addHook('onClose', async () => {
+  varreduraConvites.parar();
   await container.encerrar();
 });
 

@@ -1,4 +1,5 @@
 import Type, { type Static } from 'typebox';
+import { DURACAO_MAXIMA_MINUTOS, ORCAMENTO_MAXIMO } from '../../domain/entidades/projeto.js';
 import { PAPEIS } from '../../domain/enums/papel.js';
 import { TIPOS_CAPTACAO } from '../../domain/enums/tipo-captacao.js';
 
@@ -6,9 +7,24 @@ const Id = Type.String({ minLength: 1, maxLength: 64 });
 const DataHora = Type.String({ format: 'date-time' });
 const Texto = (maximo: number) => Type.String({ minLength: 1, maxLength: maximo });
 const NaoNegativo = Type.Number({ minimum: 0 });
+const Orcamento = Type.Number({ exclusiveMinimum: 0, maximum: ORCAMENTO_MAXIMO });
+const DuracaoMinutos = Type.Integer({ minimum: 1, maximum: DURACAO_MAXIMA_MINUTOS });
 
 export const PapelSchema = Type.Enum([...PAPEIS]);
 export const TipoCaptacaoSchema = Type.Enum([...TIPOS_CAPTACAO]);
+export const DetalhesSchema = Type.Record(Type.String(), Type.Unknown(), { maxProperties: 20 });
+
+const LocalizacaoSchema = Type.Object({
+  cidade: Texto(120),
+  uf: Type.String({ pattern: '^[A-Za-z]{2}$' }),
+  latitude: Type.Number({ minimum: -90, maximum: 90 }),
+  longitude: Type.Number({ minimum: -180, maximum: 180 }),
+});
+
+const RequisitosSchema = Type.Array(
+  Type.Object({ papel: PapelSchema, peso: Type.Number({ exclusiveMinimum: 0, maximum: 10 }) }),
+  { minItems: 1, maxItems: 6 },
+);
 
 const grupoNumerico = (chaves: readonly string[]) =>
   Type.Optional(
@@ -54,23 +70,39 @@ export const CorpoCriarProjeto = Type.Object(
     produtorId: Id,
     genero: Texto(80),
     tipoCaptacao: TipoCaptacaoSchema,
-    duracaoMinutos: Type.Integer({ minimum: 1 }),
-    orcamento: Type.Number({ exclusiveMinimum: 0 }),
+    duracaoMinutos: DuracaoMinutos,
+    orcamento: Orcamento,
     dataInicio: DataHora,
     dataEntrega: DataHora,
-    localizacao: Type.Object({
-      cidade: Texto(120),
-      uf: Type.String({ pattern: '^[A-Za-z]{2}$' }),
-      latitude: Type.Number({ minimum: -90, maximum: 90 }),
-      longitude: Type.Number({ minimum: -180, maximum: 180 }),
-    }),
-    requisitos: Type.Array(
-      Type.Object({ papel: PapelSchema, peso: Type.Number({ exclusiveMinimum: 0, maximum: 10 }) }),
-      { minItems: 1, maxItems: 6 },
-    ),
+    localizacao: LocalizacaoSchema,
+    requisitos: RequisitosSchema,
+    detalhes: Type.Optional(DetalhesSchema),
     estrategia: Type.Optional(Id),
     parametros: Type.Optional(ParametrosSchema),
   },
+  { additionalProperties: false },
+);
+
+export const CorpoProjetoDeModelo = Type.Object(
+  {
+    titulo: Texto(200),
+    produtorId: Id,
+    dataInicio: DataHora,
+    dataEntrega: DataHora,
+    genero: Type.Optional(Texto(80)),
+    duracaoMinutos: Type.Optional(DuracaoMinutos),
+    orcamento: Type.Optional(Orcamento),
+    localizacao: Type.Optional(LocalizacaoSchema),
+    requisitos: Type.Optional(RequisitosSchema),
+    detalhes: Type.Optional(DetalhesSchema),
+    estrategia: Type.Optional(Id),
+    parametros: Type.Optional(ParametrosSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const CorpoDetalhes = Type.Object(
+  { detalhes: DetalhesSchema },
   { additionalProperties: false },
 );
 
@@ -81,7 +113,7 @@ export const CorpoRodada = Type.Object(
 
 export const CorpoReavaliacao = Type.Object(
   {
-    orcamento: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    orcamento: Type.Optional(Orcamento),
     dataEntrega: Type.Optional(DataHora),
     limiar: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
   },
@@ -102,6 +134,7 @@ export const ParamsProjeto = Type.Object({ projetoId: Id });
 export const ParamsEquipe = Type.Object({ projetoId: Id, equipeId: Id });
 export const ParamsMembro = Type.Object({ projetoId: Id, equipeId: Id, papel: PapelSchema });
 export const ParamsConvite = Type.Object({ conviteId: Id });
+export const ParamsModelo = Type.Object({ modeloId: Id });
 export const ParamsDestinatario = Type.Object({ destinatarioId: Id });
 
 export const MembroResposta = Type.Object({
@@ -141,9 +174,34 @@ export const ProjetoResposta = Type.Object({
   localizacao: Type.Object({ cidade: Type.String(), uf: Type.String() }),
   estrategia: Type.String(),
   requisitos: Type.Array(Type.Object({ papel: Type.String(), peso: Type.Number() })),
+  detalhes: DetalhesSchema,
   equipes: Type.Array(EquipeResposta),
   equipeFormadaId: Type.Optional(Type.String()),
 });
+
+export const ModelosResposta = Type.Array(
+  Type.Object({
+    id: Type.String(),
+    nome: Type.String(),
+    descricao: Type.String(),
+    tipoCaptacao: Type.String(),
+    genero: Type.String(),
+    duracaoMinutos: Type.Integer(),
+    orcamento: Type.Number(),
+    duracaoDias: Type.Integer(),
+    estrategia: Type.String(),
+    requisitos: Type.Array(Type.Object({ papel: Type.String(), peso: Type.Number() })),
+    detalhes: DetalhesSchema,
+  }),
+);
+
+export const TiposProjetoResposta = Type.Array(
+  Type.Object({
+    tipo: Type.String(),
+    descricao: Type.String(),
+    recomendador: Type.Object({ nome: Type.String(), descricao: Type.String() }),
+  }),
+);
 
 const CandidatoResposta = Type.Object({
   profissionalId: Type.String(),
@@ -248,4 +306,5 @@ export const MensagensResposta = Type.Array(
 );
 
 export type CorpoCriarProjeto = Static<typeof CorpoCriarProjeto>;
+export type CorpoProjetoDeModelo = Static<typeof CorpoProjetoDeModelo>;
 export type ParametrosEntrada = Static<typeof ParametrosSchema>;

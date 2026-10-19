@@ -77,6 +77,10 @@ export class OrquestradorSubstituicao extends OrquestradorEquipe<EntradaSubstitu
     return { equipes: [equipe], avisos: [] };
   }
 
+  protected override exigeRegrasDoTipo(): boolean {
+    return false;
+  }
+
   protected override rodadaDe(entrada: EntradaSubstituicao): number {
     return this.equipeDe(entrada).rodada + 1;
   }

@@ -25,10 +25,12 @@ import {
 import { migracoes } from '../../src/infrastructure/database/migrations/index.js';
 import { criarEquipe, criarMembro, criarProfissional, criarProjeto } from '../fixtures/dominio.js';
 import {
-  ID_EDITOR_ECONOMICO,
   criarEditorEconomico,
+  fabricaFiccao,
+  ID_EDITOR_ECONOMICO,
   relogioFixo,
 } from '../fixtures/orquestracao.js';
+import { fabricasTeste } from '../fixtures/fabricas.js';
 import { limparTabelas, prepararBanco } from './banco.js';
 
 describe('Repositórios TypeORM com PostgreSQL real', () => {
@@ -41,7 +43,7 @@ describe('Repositórios TypeORM com PostgreSQL real', () => {
   beforeAll(async () => {
     dataSource = await prepararBanco();
     profissionais = new RepositorioProfissionaisTypeorm(dataSource);
-    projetos = new RepositorioProjetosTypeorm(dataSource, profissionais);
+    projetos = new RepositorioProjetosTypeorm(dataSource, profissionais, fabricasTeste);
   });
 
   beforeEach(async () => {
@@ -55,7 +57,11 @@ describe('Repositórios TypeORM com PostgreSQL real', () => {
 
   async function projetoComSugestoes() {
     const projeto = criarProjetoDemonstracao();
-    const resultado = await new OrquestradorPadrao(profissionais, relogioFixo).orquestrar({
+    const resultado = await new OrquestradorPadrao(
+      profissionais,
+      fabricaFiccao,
+      relogioFixo,
+    ).orquestrar({
       projeto,
       estrategia: cosseno,
       parametros,
@@ -157,7 +163,7 @@ describe('Repositórios TypeORM com PostgreSQL real', () => {
         throw new Error('projeto não reconstruído');
       }
 
-      await new OrquestradorSubstituicao(profissionais, relogioFixo).orquestrar({
+      await new OrquestradorSubstituicao(profissionais, fabricaFiccao, relogioFixo).orquestrar({
         projeto: lido,
         estrategia: cosseno,
         parametros,

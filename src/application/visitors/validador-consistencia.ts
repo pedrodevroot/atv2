@@ -17,7 +17,12 @@ export type CodigoProblema =
   | 'PROFISSIONAL_DUPLICADO'
   | 'CUSTO_FORA_DA_FAIXA'
   | 'AGENDA_CONFLITANTE'
-  | 'PROFISSIONAL_INATIVO';
+  | 'PROFISSIONAL_INATIVO'
+  | 'TIPO_INCOMPATIVEL'
+  | 'REQUISITO_DO_TIPO'
+  | 'DETALHE_DO_TIPO'
+  | 'PRAZO_DO_TIPO'
+  | 'COMPETENCIA_DO_TIPO';
 
 export interface Problema {
   readonly codigo: CodigoProblema;

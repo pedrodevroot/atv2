@@ -1,5 +1,8 @@
+import { ErroDominio } from '../../domain/comum/erro-dominio.js';
+
 export type CodigoErroAplicacao =
   | 'ESTRATEGIA_DESCONHECIDA'
+  | 'TIPO_PROJETO_DESCONHECIDO'
   | 'PARAMETROS_INVALIDOS'
   | 'RESTRICAO_VIOLADA'
   | 'FLUXO_INVARIAVEL'
@@ -29,6 +32,12 @@ export function conflitoConcorrencia(recurso: string, id: string): ErroAplicacao
 
 export function ehConflitoConcorrencia(erro: unknown): boolean {
   return erro instanceof ErroAplicacao && erro.codigo === 'CONFLITO_CONCORRENCIA';
+}
+
+export function ehErroDeNegocio(erro: unknown): erro is ErroAplicacao | ErroDominio {
+  return (
+    erro instanceof ErroDominio || (erro instanceof ErroAplicacao && !ehConflitoConcorrencia(erro))
+  );
 }
 
 const ESPERA_BASE_MS = 15;

@@ -1,7 +1,11 @@
-import { Projeto, type ResultadoReavaliacao } from '../../domain/entidades/projeto.js';
+import type {
+  AjustesProjeto,
+  DetalhesProjeto,
+  Projeto,
+  ResultadoReavaliacao,
+} from '../../domain/entidades/projeto.js';
 import { RequisitoPapel } from '../../domain/entidades/requisito-papel.js';
 import type { Papel } from '../../domain/enums/papel.js';
-import type { TipoCaptacao } from '../../domain/enums/tipo-captacao.js';
 import { criarEvento } from '../../domain/eventos/evento-recomendacao.js';
 import { Localizacao, type DadosLocalizacao } from '../../domain/value-objects/localizacao.js';
 import {
@@ -39,32 +43,38 @@ export class GerarRodadaRecomendacao {
     opcoes: OpcoesRodada,
     contexto: ContextoRequisicao,
   ): Promise<ResultadoRodada> {
-    const { estrategias, orquestradorPadrao, projetos, recomendacoes, sujeito } = this.deps;
-    const estrategia = estrategias.resolver(projeto, opcoes.estrategia);
+    const { sistema, projetos, recomendacoes, convites } = this.deps;
     const parametros = opcoes.parametros
       ? resolverParametros(opcoes.parametros)
       : this.deps.parametros;
-    projeto.definirEstrategia(estrategia.nome);
 
-    const resultado = await orquestradorPadrao.orquestrar({ projeto, estrategia, parametros });
+    const resultado = await sistema.recomendar(projeto, {
+      ...(opcoes.estrategia ? { estrategia: opcoes.estrategia } : {}),
+      parametros,
+    });
+    projeto.definirEstrategia(resultado.estrategia);
+    const descartadas =
+      resultado.equipes.length > 0 ? projeto.equipesAtivas.map((equipe) => equipe.id) : [];
     if (resultado.equipes.length > 0) {
       projeto.registrarSugestoes(resultado.equipes);
     }
     await projetos.salvar(projeto);
+    await convites.cancelarPendentesDasEquipes(descartadas);
     await recomendacoes.salvarTodas(resultado.recomendacoes);
 
-    sujeito.notificarObservadores(
+    sistema.notificarObservadores(
       eventoRecomendacaoGerada(
         {
           projeto,
           equipes: resultado.equipes,
           membros: membrosSugeridos(resultado.equipes),
-          estrategia: estrategia.nome,
+          estrategia: resultado.estrategia,
           rodada: resultado.rodada,
           parcial: resultado.parcial,
         },
         contexto,
       ),
+      projeto,
     );
     return { projeto, resultado };
   }
@@ -74,13 +84,14 @@ export interface DadosNovoProjeto {
   readonly titulo: string;
   readonly produtorId: string;
   readonly genero: string;
-  readonly tipoCaptacao: TipoCaptacao;
+  readonly tipoCaptacao: string;
   readonly duracaoMinutos: number;
   readonly orcamento: number;
   readonly dataInicio: Date;
   readonly dataEntrega: Date;
   readonly localizacao: DadosLocalizacao;
   readonly requisitos: readonly { papel: Papel; peso: number }[];
+  readonly detalhes?: DetalhesProjeto;
   readonly estrategia?: string;
   readonly parametros?: ParametrosRecomendacaoParciais;
 }
@@ -92,15 +103,12 @@ export class CriarProjetoERecomendar {
   ) {}
 
   async executar(dados: DadosNovoProjeto, contexto: ContextoRequisicao): Promise<ResultadoRodada> {
-    const { estrategias, parametros, relogio } = this.deps;
-    const estrategia = estrategias.obter(
-      dados.estrategia ?? estrategias.sugerirPara(dados.orcamento, parametros),
-    );
-    const projeto = Projeto.criar({
+    const { fabricas, sistema, relogio } = this.deps;
+    const fabrica = fabricas.para(dados.tipoCaptacao);
+    const projeto = fabrica.criarProjeto({
       titulo: dados.titulo,
       produtorId: dados.produtorId,
       genero: dados.genero,
-      tipoCaptacao: dados.tipoCaptacao,
       duracaoMinutos: dados.duracaoMinutos,
       orcamento: dados.orcamento,
       dataInicio: dados.dataInicio,
@@ -109,12 +117,75 @@ export class CriarProjetoERecomendar {
       requisitos: dados.requisitos.map((requisito) =>
         RequisitoPapel.criar(requisito.papel, requisito.peso),
       ),
-      estrategia: estrategia.nome,
+      detalhes: dados.detalhes ?? {},
+      estrategia:
+        dados.estrategia ?? sistema.estrategiaSugerida(dados.tipoCaptacao, dados.orcamento),
       criadoEm: relogio(),
     });
     return this.gerarRodada.executar(
       projeto,
       dados.parametros ? { parametros: dados.parametros } : {},
+      contexto,
+    );
+  }
+}
+
+export interface DadosProjetoDeModelo {
+  readonly modeloId: string;
+  readonly titulo: string;
+  readonly produtorId: string;
+  readonly dataInicio: Date;
+  readonly dataEntrega: Date;
+  readonly genero?: string;
+  readonly duracaoMinutos?: number;
+  readonly orcamento?: number;
+  readonly localizacao?: DadosLocalizacao;
+  readonly requisitos?: readonly { papel: Papel; peso: number }[];
+  readonly detalhes?: DetalhesProjeto;
+  readonly estrategia?: string;
+  readonly parametros?: ParametrosRecomendacaoParciais;
+}
+
+export class CriarProjetoDeModelo {
+  constructor(
+    private readonly deps: DependenciasCasosDeUso,
+    private readonly gerarRodada: GerarRodadaRecomendacao,
+  ) {}
+
+  async executar(
+    dados: DadosProjetoDeModelo,
+    contexto: ContextoRequisicao,
+  ): Promise<ResultadoRodada> {
+    const { modelos, sistema, relogio } = this.deps;
+    const ajustes: AjustesProjeto = {
+      titulo: dados.titulo,
+      produtorId: dados.produtorId,
+      dataInicio: dados.dataInicio,
+      dataEntrega: dados.dataEntrega,
+      criadoEm: relogio(),
+      ...(dados.genero === undefined ? {} : { genero: dados.genero }),
+      ...(dados.duracaoMinutos === undefined ? {} : { duracaoMinutos: dados.duracaoMinutos }),
+      ...(dados.orcamento === undefined ? {} : { orcamento: dados.orcamento }),
+      ...(dados.localizacao === undefined
+        ? {}
+        : { localizacao: Localizacao.criar(dados.localizacao) }),
+      ...(dados.requisitos === undefined
+        ? {}
+        : {
+            requisitos: dados.requisitos.map((requisito) =>
+              RequisitoPapel.criar(requisito.papel, requisito.peso),
+            ),
+          }),
+      ...(dados.detalhes === undefined ? {} : { detalhes: dados.detalhes }),
+    };
+    const projeto = modelos.clonar(dados.modeloId, ajustes);
+    return this.gerarRodada.executar(
+      projeto,
+      {
+        estrategia:
+          dados.estrategia ?? sistema.estrategiaSugerida(projeto.tipoCaptacao, projeto.orcamento),
+        ...(dados.parametros ? { parametros: dados.parametros } : {}),
+      },
       contexto,
     );
   }
@@ -134,6 +205,35 @@ export class RecomendarNovamente {
     return comNovasTentativas(async () => {
       const projeto = await obterProjeto(this.deps.projetos, projetoId);
       return this.gerarRodada.executar(projeto, opcoes, contexto);
+    });
+  }
+}
+
+export class AjustarDetalhesProjeto {
+  constructor(private readonly deps: DependenciasCasosDeUso) {}
+
+  executar(
+    projetoId: string,
+    detalhes: DetalhesProjeto,
+    contexto: ContextoRequisicao,
+  ): Promise<Projeto> {
+    return comNovasTentativas(async () => {
+      const projeto = await obterProjeto(this.deps.projetos, projetoId);
+      projeto.ajustarDetalhes(detalhes);
+      await this.deps.projetos.salvar(projeto);
+      this.deps.sistema.notificarObservadores(
+        criarEvento(
+          'DETALHES_ATUALIZADOS',
+          {
+            projetoId: projeto.id,
+            produtorId: projeto.produtorId,
+            detalhes: { ...projeto.detalhes },
+          },
+          { origem: ORIGEM_SERVICO, ...contexto },
+        ),
+        projeto,
+      );
+      return projeto;
     });
   }
 }
@@ -183,12 +283,13 @@ export class ReavaliarProjeto {
     if (!rodada) {
       await this.deps.projetos.salvar(projeto);
     }
-    this.deps.sujeito.notificarObservadores(
+    this.deps.sistema.notificarObservadores(
       criarEvento(
         'REAVALIACAO_SOLICITADA',
         { projetoId: projeto.id, produtorId: projeto.produtorId, ...reavaliacao },
         { origem: ORIGEM_SERVICO, ...contexto },
       ),
+      projeto,
     );
     return rodada ? { projeto, reavaliacao, rodada } : { projeto, reavaliacao };
   }

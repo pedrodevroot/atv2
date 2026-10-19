@@ -15,7 +15,11 @@ import {
   criarProjetoDemonstracao,
 } from '../../fixtures/cadastro-demonstracao.js';
 import { criarProfissional, criarProjeto } from '../../fixtures/dominio.js';
-import { criarAmbienteOrquestracao, relogioFixo } from '../../fixtures/orquestracao.js';
+import {
+  criarAmbienteOrquestracao,
+  fabricaFiccao,
+  relogioFixo,
+} from '../../fixtures/orquestracao.js';
 
 function relogioControlado(inicio = 0) {
   let agora = inicio;
@@ -252,7 +256,11 @@ describe('RepositorioProfissionaisResiliente', () => {
     const { repositorio } = criarResiliente(fonte, relogio);
     const { parametros, cosseno } = criarAmbienteOrquestracao();
 
-    const resultado = await new OrquestradorPadrao(repositorio, relogioFixo).orquestrar({
+    const resultado = await new OrquestradorPadrao(
+      repositorio,
+      fabricaFiccao,
+      relogioFixo,
+    ).orquestrar({
       projeto: criarProjetoDemonstracao(),
       estrategia: cosseno,
       parametros,

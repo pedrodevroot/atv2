@@ -1,5 +1,9 @@
 import { Faker, base, pt_BR } from '@faker-js/faker';
-import { PERFIS_IDEAIS } from '../../../application/strategies/catalogo-perfis.js';
+import { AJUSTES_PERFIL_ANIMACAO } from '../../../application/familias/animacao/recomendador-animacao.js';
+import { AJUSTES_PERFIL_DOCUMENTARIO } from '../../../application/familias/documentario/recomendador-documentario.js';
+import { AJUSTES_PERFIL_FICCAO } from '../../../application/familias/ficcao/recomendador-ficcao.js';
+import { AJUSTES_PERFIL_PUBLICITARIO } from '../../../application/familias/publicitario/recomendador-publicitario.js';
+import { PERFIS_BASE } from '../../../application/strategies/catalogo-perfis.js';
 import { Avaliacao } from '../../../domain/entidades/avaliacao.js';
 import { Competencia } from '../../../domain/entidades/competencia.js';
 import { ParticipacaoProjeto } from '../../../domain/entidades/participacao-projeto.js';
@@ -53,11 +57,16 @@ const PRECO_POR_PAPEL: Record<Papel, readonly [number, number]> = {
 const INICIO_AGENDA = new Date('2026-09-01T00:00:00.000Z');
 const FIM_AGENDA = new Date('2027-12-31T00:00:00.000Z');
 
+const AJUSTES_DAS_FAMILIAS = [
+  AJUSTES_PERFIL_DOCUMENTARIO,
+  AJUSTES_PERFIL_ANIMACAO,
+  AJUSTES_PERFIL_FICCAO,
+  AJUSTES_PERFIL_PUBLICITARIO,
+];
+
 function competenciasDoPapel(papel: Papel): string[] {
-  const doTipo = Object.values(PERFIS_IDEAIS.ajustesPorTipo).flatMap((ajustes) =>
-    Object.keys(ajustes[papel] ?? {}),
-  );
-  return [...new Set([...Object.keys(PERFIS_IDEAIS.base[papel]), ...doTipo])];
+  const doTipo = AJUSTES_DAS_FAMILIAS.flatMap((ajustes) => Object.keys(ajustes[papel] ?? {}));
+  return [...new Set([...Object.keys(PERFIS_BASE[papel]), ...doTipo])];
 }
 
 const TODAS_COMPETENCIAS = [...new Set(PAPEIS.flatMap(competenciasDoPapel))];

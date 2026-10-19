@@ -9,9 +9,9 @@ import { Intervalo } from '../../../src/domain/value-objects/intervalo.js';
 import { criarAvaliacao, criarProfissional } from '../../fixtures/dominio.js';
 
 describe('Enums de domínio', () => {
-  it('lista os seis papéis técnicos do PDF e os três tipos de captação', () => {
+  it('lista os seis papéis técnicos do PDF e os quatro tipos de captação', () => {
     expect(PAPEIS).toHaveLength(6);
-    expect(TIPOS_CAPTACAO).toEqual(['DOCUMENTARIO', 'FICCAO', 'ANIMACAO']);
+    expect(TIPOS_CAPTACAO).toEqual(['DOCUMENTARIO', 'FICCAO', 'ANIMACAO', 'PUBLICITARIO']);
     expect(ehPapel('EDITOR')).toBe(true);
     expect(ehPapel('PRODUTOR')).toBe(false);
   });

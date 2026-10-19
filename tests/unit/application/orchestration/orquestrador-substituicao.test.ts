@@ -13,14 +13,19 @@ import {
   criarProjetoDemonstracao,
 } from '../../../fixtures/cadastro-demonstracao.js';
 import {
-  ID_EDITOR_ECONOMICO,
   criarAmbienteOrquestracao,
+  fabricaFiccao,
+  ID_EDITOR_ECONOMICO,
   relogioFixo,
 } from '../../../fixtures/orquestracao.js';
 
 describe('OrquestradorSubstituicao', () => {
   const ambiente = criarAmbienteOrquestracao();
-  const substituicao = new OrquestradorSubstituicao(ambiente.repositorio, relogioFixo);
+  const substituicao = new OrquestradorSubstituicao(
+    ambiente.repositorio,
+    fabricaFiccao,
+    relogioFixo,
+  );
   let projeto: Projeto;
   let equipe: Equipe;
 
@@ -34,7 +39,11 @@ describe('OrquestradorSubstituicao', () => {
 
   beforeEach(async () => {
     projeto = criarProjetoDemonstracao();
-    const resultado = await new OrquestradorPadrao(ambiente.repositorio, relogioFixo).orquestrar({
+    const resultado = await new OrquestradorPadrao(
+      ambiente.repositorio,
+      fabricaFiccao,
+      relogioFixo,
+    ).orquestrar({
       projeto,
       estrategia: ambiente.cosseno,
       parametros: ambiente.parametros,

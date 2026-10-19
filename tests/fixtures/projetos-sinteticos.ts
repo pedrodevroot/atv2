@@ -1,8 +1,9 @@
-import { Projeto } from '../../src/domain/entidades/projeto.js';
+import type { Projeto } from '../../src/domain/entidades/projeto.js';
 import { RequisitoPapel } from '../../src/domain/entidades/requisito-papel.js';
 import { PAPEIS } from '../../src/domain/enums/papel.js';
 import { TIPOS_CAPTACAO } from '../../src/domain/enums/tipo-captacao.js';
 import { Localizacao } from '../../src/domain/value-objects/localizacao.js';
+import { DETALHES_PADRAO, fabricasTeste } from './fabricas.js';
 
 const GENEROS = ['drama', 'comédia', 'suspense', 'social', 'infantil', 'biografia'];
 const CIDADES = [
@@ -21,13 +22,16 @@ export function gerarProjetosSinteticos(total: number, semente = 7): Projeto[] {
   const escolher = <T>(itens: readonly T[]): T =>
     itens[Math.floor(aleatorio() * itens.length)] as T;
 
-  return Array.from({ length: total }, (_, indice) =>
-    Projeto.criar({
+  return Array.from({ length: total }, (_, indice) => {
+    const produtorId = `produtor-${1 + Math.floor(aleatorio() * 300)}`;
+    const genero = escolher(GENEROS);
+    const tipoCaptacao = escolher(TIPOS_CAPTACAO);
+    return fabricasTeste.para(tipoCaptacao).criarProjeto({
       id: `projeto-sintetico-${indice}`,
       titulo: `Projeto ${indice}`,
-      produtorId: `produtor-${1 + Math.floor(aleatorio() * 300)}`,
-      genero: escolher(GENEROS),
-      tipoCaptacao: escolher(TIPOS_CAPTACAO),
+      produtorId,
+      genero,
+      detalhes: DETALHES_PADRAO[tipoCaptacao],
       duracaoMinutos: 20 + Math.floor(aleatorio() * 100),
       orcamento: 80_000 + Math.floor(aleatorio() * 320_000),
       dataInicio: new Date('2026-10-01T00:00:00.000Z'),
@@ -37,6 +41,6 @@ export function gerarProjetosSinteticos(total: number, semente = 7): Projeto[] {
         RequisitoPapel.criar(papel, 1 + Math.floor(aleatorio() * 10)),
       ),
       estrategia: 'similaridade-cosseno',
-    }),
-  );
+    });
+  });
 }

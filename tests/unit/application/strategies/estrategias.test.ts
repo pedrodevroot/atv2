@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { RecomendadorDocumentario } from '../../../../src/application/familias/documentario/recomendador-documentario.js';
+import { RecomendadorFiccao } from '../../../../src/application/familias/ficcao/recomendador-ficcao.js';
 import { CatalogoPerfis } from '../../../../src/application/strategies/catalogo-perfis.js';
 import { FiltragemColaborativa } from '../../../../src/application/strategies/filtragem-colaborativa.js';
 import type { FiltroCandidato } from '../../../../src/application/strategies/filtros-candidato.js';
-import { resolverParametros } from '../../../../src/application/strategies/parametros-recomendacao.js';
+import {
+  VALOR_MAXIMO_PARAMETRO,
+  resolverParametros,
+} from '../../../../src/application/strategies/parametros-recomendacao.js';
 import { RegrasOrcamento } from '../../../../src/application/strategies/regras-orcamento.js';
 import { SimilaridadeCosseno } from '../../../../src/application/strategies/similaridade-cosseno.js';
 import { Competencia } from '../../../../src/domain/entidades/competencia.js';
@@ -34,7 +39,7 @@ function primeiroDiretor(ranking: ReturnType<SimilaridadeCosseno['recomendar']>)
 }
 
 describe('SimilaridadeCosseno', () => {
-  it('usa o perfil ideal do tipo de captação', () => {
+  it('o recomendador de cada família aplica o perfil ideal do seu tipo de projeto', () => {
     const entrevistador = criarProfissional({
       id: 'entrevistador',
       competencias: [Competencia.criar('Entrevista', 5), Competencia.criar('Pesquisa', 5)],
@@ -44,17 +49,42 @@ describe('SimilaridadeCosseno', () => {
       competencias: [Competencia.criar('Direção de atores', 5)],
     });
     const cadastro = [entrevistador, diretorDeAtores];
-    const estrategia = new SimilaridadeCosseno();
 
     const documentario = criarProjeto({ tipoCaptacao: TipoCaptacao.DOCUMENTARIO });
     const ficcao = criarProjeto({ tipoCaptacao: TipoCaptacao.FICCAO });
 
     expect(
-      primeiroDiretor(estrategia.recomendar(documentario, cadastro, padrao)).profissional.id,
+      primeiroDiretor(new RecomendadorDocumentario().recomendar(documentario, cadastro, padrao))
+        .profissional.id,
     ).toBe('entrevistador');
-    expect(primeiroDiretor(estrategia.recomendar(ficcao, cadastro, padrao)).profissional.id).toBe(
-      'diretor-de-atores',
-    );
+    expect(
+      primeiroDiretor(new RecomendadorFiccao().recomendar(ficcao, cadastro, padrao)).profissional
+        .id,
+    ).toBe('diretor-de-atores');
+  });
+
+  it('a estratégia genérica usa só o perfil base, sem conhecer o tipo do projeto', () => {
+    const entrevistador = criarProfissional({
+      id: 'entrevistador',
+      competencias: [Competencia.criar('Entrevista', 5), Competencia.criar('Pesquisa', 5)],
+    });
+    const diretorDeAtores = criarProfissional({
+      id: 'diretor-de-atores',
+      competencias: [Competencia.criar('Direção de atores', 5)],
+    });
+    const estrategia = new SimilaridadeCosseno();
+
+    for (const tipoCaptacao of [TipoCaptacao.DOCUMENTARIO, TipoCaptacao.FICCAO]) {
+      expect(
+        primeiroDiretor(
+          estrategia.recomendar(
+            criarProjeto({ tipoCaptacao }),
+            [entrevistador, diretorDeAtores],
+            padrao,
+          ),
+        ).profissional.id,
+      ).toBe('diretor-de-atores');
+    }
   });
 
   it('peso de experiência parametrizável altera o resultado', () => {
@@ -75,8 +105,9 @@ describe('SimilaridadeCosseno', () => {
   });
 
   it('aceita catálogo e filtros injetados', () => {
-    const catalogo = new CatalogoPerfis({
-      base: {
+    const catalogo = new CatalogoPerfis(
+      {},
+      {
         DIRETOR: { fotografia: 1 },
         DIRETOR_FOTOGRAFIA: {},
         SONOPLASTA: {},
@@ -84,8 +115,7 @@ describe('SimilaridadeCosseno', () => {
         ROTEIRISTA: {},
         EFEITOS_VISUAIS: {},
       },
-      ajustesPorTipo: {},
-    });
+    );
     const aceitaTudoDoPapel: FiltroCandidato = {
       nome: 'papel',
       aceita: (profissional, contexto) => profissional.atuaComo(contexto.papel),
@@ -154,6 +184,41 @@ describe('FiltragemColaborativa', () => {
     const ranking = estrategia.recomendar(criarProjeto(), [criarProfissional()], padrao);
 
     expect(primeiroDiretor(ranking).score).toBe(0.5);
+  });
+
+  it('sem peso a priori e sem avaliações continua usando a média a priori, sem NaN', () => {
+    const semPriori = resolverParametros({ colaborativa: { pesoPriori: 0, mediaPriori: 4 } });
+
+    const diretor = primeiroDiretor(
+      estrategia.recomendar(criarProjeto(), [criarProfissional()], semPriori),
+    );
+
+    expect(diretor.score).toBe(0.75);
+    expect(diretor.justificativa).toBe(
+      'média bayesiana 4.00 de 0 avaliação(ões), 0 em projetos similares',
+    );
+  });
+
+  it('pesos no limite máximo mantêm score e justificativa finitos', () => {
+    const extremos = resolverParametros({
+      colaborativa: {
+        pesoPriori: VALOR_MAXIMO_PARAMETRO,
+        bonusMesmoGenero: VALOR_MAXIMO_PARAMETRO,
+        bonusMesmoTipo: VALOR_MAXIMO_PARAMETRO,
+        bonusMesmoPapel: VALOR_MAXIMO_PARAMETRO,
+        bonusMesmoProdutor: VALOR_MAXIMO_PARAMETRO,
+      },
+    });
+    const avaliado = criarProfissional({
+      avaliacoes: Array.from({ length: 50 }, () => criarAvaliacao({ nota: 5 })),
+    });
+
+    const diretor = primeiroDiretor(estrategia.recomendar(criarProjeto(), [avaliado], extremos));
+
+    expect(diretor.score).toBe(0.9975);
+    expect(diretor.justificativa).toBe(
+      'média bayesiana 4.99 de 50 avaliação(ões), 50 em projetos similares',
+    );
   });
 });
 

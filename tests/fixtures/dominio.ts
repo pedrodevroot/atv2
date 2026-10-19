@@ -3,13 +3,18 @@ import { Competencia } from '../../src/domain/entidades/competencia.js';
 import { Equipe, type DadosEquipe } from '../../src/domain/entidades/equipe.js';
 import { MembroEquipe, type DadosMembroEquipe } from '../../src/domain/entidades/membro-equipe.js';
 import { Profissional, type DadosProfissional } from '../../src/domain/entidades/profissional.js';
-import { Projeto, type DadosProjeto } from '../../src/domain/entidades/projeto.js';
+import type {
+  DadosCriacaoProjeto,
+  DadosProjeto,
+  Projeto,
+} from '../../src/domain/entidades/projeto.js';
 import { RequisitoPapel } from '../../src/domain/entidades/requisito-papel.js';
 import { Papel } from '../../src/domain/enums/papel.js';
 import { TipoCaptacao } from '../../src/domain/enums/tipo-captacao.js';
 import { FaixaPreco } from '../../src/domain/value-objects/faixa-preco.js';
 import { Intervalo } from '../../src/domain/value-objects/intervalo.js';
 import { Localizacao } from '../../src/domain/value-objects/localizacao.js';
+import { DETALHES_PADRAO, fabricasTeste } from './fabricas.js';
 
 export const INICIO_PROJETO = new Date('2026-10-01T00:00:00.000Z');
 export const ENTREGA_PROJETO = new Date('2026-12-30T00:00:00.000Z');
@@ -57,12 +62,13 @@ export function criarAvaliacao(dados: Partial<DadosAvaliacao> = {}): Avaliacao {
   });
 }
 
-export function criarProjeto(dados: Partial<DadosProjeto> = {}): Projeto {
-  return Projeto.criar({
+export type DadosProjetoTeste = Partial<DadosCriacaoProjeto> & { tipoCaptacao?: TipoCaptacao };
+
+export function dadosProjetoBase(dados: Partial<DadosProjeto> = {}): DadosProjeto {
+  return {
     titulo: 'Vozes do Sertão',
     produtorId: 'produtor-1',
     genero: 'drama',
-    tipoCaptacao: TipoCaptacao.FICCAO,
     duracaoMinutos: 90,
     orcamento: 100_000,
     dataInicio: INICIO_PROJETO,
@@ -71,7 +77,15 @@ export function criarProjeto(dados: Partial<DadosProjeto> = {}): Projeto {
     requisitos: [RequisitoPapel.criar(Papel.DIRETOR, 5), RequisitoPapel.criar(Papel.EDITOR, 3)],
     estrategia: 'similaridade-cosseno',
     ...dados,
-  });
+  };
+}
+
+export function criarProjeto({
+  tipoCaptacao = TipoCaptacao.FICCAO,
+  detalhes = DETALHES_PADRAO[tipoCaptacao],
+  ...dados
+}: DadosProjetoTeste = {}): Projeto {
+  return fabricasTeste.para(tipoCaptacao).criarProjeto({ ...dadosProjetoBase(dados), detalhes });
 }
 
 export function criarMembro(

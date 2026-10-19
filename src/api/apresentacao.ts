@@ -1,4 +1,6 @@
+import type { FabricaProjeto } from '../application/familias/fabrica-projeto.js';
 import type { ResultadoOrquestracao } from '../application/orchestration/orquestrador-equipe.js';
+import type { ModeloProjeto } from '../application/prototipos/catalogo-modelos.js';
 import type { EntradaAuditoria } from '../application/ports/canais-saida.js';
 import type { AnaliseComposicao } from '../application/use-cases/casos-consulta.js';
 import type { RankingPorPapel } from '../application/strategies/estrategia-recomendacao.js';
@@ -55,10 +57,40 @@ export function apresentarProjeto(projeto: Projeto) {
       papel: requisito.papel,
       peso: requisito.peso,
     })),
+    detalhes: { ...projeto.detalhes },
     equipes: projeto.equipes
       .filter((equipe) => equipe.ativa || equipe === formada)
       .map(apresentarEquipe),
     ...(formada ? { equipeFormadaId: formada.id } : {}),
+  };
+}
+
+export function apresentarModelo(modelo: ModeloProjeto) {
+  const { prototipo } = modelo;
+  return {
+    id: modelo.id,
+    nome: modelo.nome,
+    descricao: modelo.descricao,
+    tipoCaptacao: prototipo.tipoCaptacao,
+    genero: prototipo.genero,
+    duracaoMinutos: prototipo.duracaoMinutos,
+    orcamento: prototipo.orcamento,
+    duracaoDias: prototipo.periodo.duracaoDias,
+    estrategia: prototipo.estrategia,
+    requisitos: prototipo.requisitos.map((requisito) => ({
+      papel: requisito.papel,
+      peso: requisito.peso,
+    })),
+    detalhes: { ...prototipo.detalhes },
+  };
+}
+
+export function apresentarTipoProjeto(fabrica: FabricaProjeto) {
+  const recomendador = fabrica.criarRecomendador();
+  return {
+    tipo: fabrica.tipo,
+    descricao: fabrica.descricao,
+    recomendador: { nome: recomendador.nome, descricao: recomendador.descricao },
   };
 }
 

@@ -34,6 +34,7 @@ describe('carregarConfig', () => {
         circuitoLimiteFalhas: 3,
         circuitoEsperaMs: 10_000,
       },
+      convites: { varreduraMs: 60_000 },
     });
   });
 

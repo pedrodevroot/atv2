@@ -5,12 +5,13 @@ import { Equipe } from '../../domain/entidades/equipe.js';
 import { MembroEquipe } from '../../domain/entidades/membro-equipe.js';
 import { ParticipacaoProjeto } from '../../domain/entidades/participacao-projeto.js';
 import { Profissional } from '../../domain/entidades/profissional.js';
-import { Projeto } from '../../domain/entidades/projeto.js';
+import type { Projeto } from '../../domain/entidades/projeto.js';
 import { Recomendacao } from '../../domain/entidades/recomendacao.js';
 import { RequisitoPapel } from '../../domain/entidades/requisito-papel.js';
 import type { Papel } from '../../domain/enums/papel.js';
 import type { StatusConvite, StatusEquipe, StatusMembro } from '../../domain/enums/status.js';
 import type { TipoCaptacao } from '../../domain/enums/tipo-captacao.js';
+import type { RegistroFabricas } from '../../application/familias/registro-fabricas.js';
 import { FaixaPreco } from '../../domain/value-objects/faixa-preco.js';
 import { Intervalo } from '../../domain/value-objects/intervalo.js';
 import { Localizacao } from '../../domain/value-objects/localizacao.js';
@@ -177,6 +178,7 @@ export function deProjeto(projeto: Projeto): LinhasProjeto {
       longitude: projeto.localizacao.longitude,
       estrategia: projeto.estrategia,
       criado_em: projeto.criadoEm,
+      detalhes: { ...projeto.detalhes },
     },
     requisitos: projeto.requisitos.map((requisito, ordem) => ({
       projeto_id: projeto.id,
@@ -218,6 +220,7 @@ export interface LinhasProjetoLidas {
 export function paraProjeto(
   linhas: LinhasProjetoLidas,
   profissionais: ReadonlyMap<string, Profissional>,
+  fabricas: RegistroFabricas,
 ): Projeto {
   const { projeto } = linhas;
   const equipes = linhas.equipes.map((equipe) =>
@@ -248,12 +251,11 @@ export function paraProjeto(
         }),
     }),
   );
-  return Projeto.criar({
+  return fabricas.para(projeto.tipo_captacao).criarProjeto({
     id: projeto.id,
     titulo: projeto.titulo,
     produtorId: projeto.produtor_id,
     genero: projeto.genero,
-    tipoCaptacao: projeto.tipo_captacao as TipoCaptacao,
     duracaoMinutos: projeto.duracao_minutos,
     orcamento: Number(projeto.orcamento),
     dataInicio: projeto.data_inicio,
@@ -270,6 +272,7 @@ export function paraProjeto(
     estrategia: projeto.estrategia,
     equipes,
     criadoEm: projeto.criado_em,
+    detalhes: projeto.detalhes,
   });
 }
 

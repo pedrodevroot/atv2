@@ -10,20 +10,34 @@ import { NotificadorInterno } from '../../src/application/observers/notificador-
 import { PublicadorIntegracao } from '../../src/application/observers/publicador-integracao.js';
 import type { Observador } from '../../src/application/ports/observador.js';
 import type { RepositorioProfissionais } from '../../src/application/ports/repositorio-profissionais.js';
+import { CatalogoModelos } from '../../src/application/prototipos/catalogo-modelos.js';
+import { criarModelosPadrao } from '../../src/application/prototipos/modelos-padrao.js';
+import { SistemaRecomendacao } from '../../src/application/sistema-recomendacao.js';
+import { resolverParametros } from '../../src/application/strategies/parametros-recomendacao.js';
 import { CalculadorCompatibilidade } from '../../src/application/visitors/calculador-compatibilidade.js';
 import { GeradorRelatorio } from '../../src/application/visitors/gerador-relatorio.js';
 import { ValidadorConsistencia } from '../../src/application/visitors/validador-consistencia.js';
-import { criarCanaisSaida } from '../../src/container.js';
+import { criarCanaisSaida, criarRegistroEstrategias } from '../../src/container.js';
+import { RequisitoPapel } from '../../src/domain/entidades/requisito-papel.js';
 import { Papel } from '../../src/domain/enums/papel.js';
+import { TIPOS_CAPTACAO, TipoCaptacao } from '../../src/domain/enums/tipo-captacao.js';
 import { criarEvento } from '../../src/domain/eventos/evento-recomendacao.js';
 import { BarramentoEventosEmMemoria } from '../../src/infrastructure/messaging/barramento-eventos-memoria.js';
+import { CaixaMensagensMemoria } from '../../src/infrastructure/notifications/canais-simulados.js';
+import { RepositorioProfissionaisMemoria } from '../../src/infrastructure/repositories/repositorio-profissionais-memoria.js';
 import { criarArvoreProjeto, fotografar } from '../fixtures/arvore-projeto.js';
 import {
   criarCadastroDemonstracao,
   criarProjetoDemonstracao,
 } from '../fixtures/cadastro-demonstracao.js';
-import { criarProjeto } from '../fixtures/dominio.js';
-import { criarAmbienteOrquestracao, relogioFixo } from '../fixtures/orquestracao.js';
+import { DETALHES_MULTITIPO, criarCadastroMultitipo } from '../fixtures/cadastro-multitipo.js';
+import { criarProjeto, dadosProjetoBase } from '../fixtures/dominio.js';
+import {
+  FabricaRealidadeVirtual,
+  TIPO_REALIDADE_VIRTUAL,
+} from '../fixtures/fabrica-realidade-virtual.js';
+import { DETALHES_PADRAO, criarFabricas, fabricasTeste } from '../fixtures/fabricas.js';
+import { criarAmbienteOrquestracao, fabricaFiccao, relogioFixo } from '../fixtures/orquestracao.js';
 
 const titulo = (texto: string) => {
   console.info(`\n${'='.repeat(78)}\n${texto}\n${'='.repeat(78)}`);
@@ -60,14 +74,18 @@ async function demonstrarTemplateMethod() {
   const { repositorio, parametros, cosseno } = criarAmbienteOrquestracao();
   const projeto = criarProjetoDemonstracao();
 
-  const padrao = await new OrquestradorPadrao(repositorio, relogioFixo).orquestrar({
+  const padrao = await new OrquestradorPadrao(repositorio, fabricaFiccao, relogioFixo).orquestrar({
     projeto,
     estrategia: cosseno,
     parametros,
   });
   projeto.registrarSugestoes(padrao.equipes);
   const [equipe] = padrao.equipes;
-  const substituicao = await new OrquestradorSubstituicao(repositorio, relogioFixo).orquestrar({
+  const substituicao = await new OrquestradorSubstituicao(
+    repositorio,
+    fabricaFiccao,
+    relogioFixo,
+  ).orquestrar({
     projeto,
     estrategia: cosseno,
     parametros,
@@ -92,7 +110,7 @@ async function demonstrarTemplateMethod() {
     },
   };
   try {
-    await new OrquestradorPadrao(repositorioContado, relogioFixo).orquestrar({
+    await new OrquestradorPadrao(repositorioContado, fabricaFiccao, relogioFixo).orquestrar({
       projeto: criarProjeto({ orcamento: 1_500 }),
       estrategia: cosseno,
       parametros,
@@ -108,7 +126,7 @@ async function demonstrarTemplateMethod() {
     }
   }
   try {
-    new Atalho(repositorio);
+    new Atalho(repositorio, fabricaFiccao);
   } catch (erro) {
     console.info(`Erro: ${(erro as Error).message}`);
   }
@@ -138,7 +156,11 @@ async function demonstrarObserver() {
 
   const { repositorio, parametros, cosseno } = criarAmbienteOrquestracao();
   const projeto = criarProjetoDemonstracao();
-  const resultado = await new OrquestradorPadrao(repositorio, relogioFixo).orquestrar({
+  const resultado = await new OrquestradorPadrao(
+    repositorio,
+    fabricaFiccao,
+    relogioFixo,
+  ).orquestrar({
     projeto,
     estrategia: cosseno,
     parametros,
@@ -207,8 +229,138 @@ async function demonstrarVisitor() {
   );
 }
 
+async function demonstrarPrototype() {
+  titulo('5. PROTOTYPE: projetos novos nascem da clonagem de modelos pré-configurados');
+  const catalogo = new CatalogoModelos(criarModelosPadrao(fabricasTeste));
+  passo('Modelos disponíveis no catálogo de protótipos:');
+  console.table(
+    catalogo.listar().map((modelo) => ({
+      modelo: modelo.id,
+      tipo: modelo.prototipo.tipoCaptacao,
+      orcamento: modelo.prototipo.orcamento,
+      detalhes: JSON.stringify(modelo.prototipo.detalhes),
+    })),
+  );
+
+  passo('Clonando "documentario-entrevistas" com ajustes finos do produtor:');
+  const clone = catalogo.clonar('documentario-entrevistas', {
+    titulo: 'Rios do cerrado',
+    produtorId: 'produtora-cerrado',
+    detalhes: { tema: 'Rios do cerrado', entrevistados: ['Seu Tião', 'Dona Lia'] },
+  });
+  const outroClone = catalogo.clonar('documentario-entrevistas');
+  console.table({
+    'clone ajustado': { titulo: clone.titulo, detalhes: JSON.stringify(clone.detalhes) },
+    'outro clone': { titulo: outroClone.titulo, detalhes: JSON.stringify(outroClone.detalhes) },
+  });
+  console.info(
+    `Cópia profunda: compartilham requisitos? ${clone.requisitos === outroClone.requisitos}; compartilham local? ${clone.localizacao === outroClone.localizacao}`,
+  );
+  clone.solicitarReavaliacao({ orcamento: 90_000 });
+  console.info(
+    `Orçamento do clone após reavaliação: ${clone.orcamento}; o protótipo continua com ${catalogo.listar()[0]?.prototipo.orcamento ?? 0}.`,
+  );
+  await Promise.resolve();
+}
+
+async function demonstrarFactoryMethod() {
+  titulo('6. FACTORY METHOD: cada fábrica decide qual classe concreta instanciar');
+  console.table(
+    TIPOS_CAPTACAO.map((tipo) => {
+      const fabrica = fabricasTeste.para(tipo);
+      return {
+        fabrica: fabrica.constructor.name,
+        criarProjeto: fabrica.criarProjeto({
+          ...dadosProjetoBase(),
+          detalhes: DETALHES_PADRAO[tipo],
+        }).constructor.name,
+        criarValidador: fabrica.criarValidador().constructor.name,
+        criarRecomendador: fabrica.criarRecomendador().constructor.name,
+        criarNotificador: fabrica.criarNotificador().constructor.name,
+      };
+    }),
+  );
+  console.info(
+    'Quem usa a fábrica só chama os métodos criarX(); a subclasse da fábrica escolhe a classe concreta.',
+  );
+  await Promise.resolve();
+}
+
+async function demonstrarAbstractFactory() {
+  titulo('7. ABSTRACT FACTORY: trocar a fábrica troca o ecossistema inteiro');
+  const caixa = new CaixaMensagensMemoria();
+  const barramento = new BarramentoEventosEmMemoria();
+  const fabricas = criarFabricas(caixa);
+  const sistema = new SistemaRecomendacao({
+    repositorio: new RepositorioProfissionaisMemoria(criarCadastroMultitipo()),
+    fabricas,
+    estrategias: criarRegistroEstrategias(),
+    sujeito: barramento,
+    parametros: resolverParametros(),
+    relogio: relogioFixo,
+  });
+  const requisitos = [
+    RequisitoPapel.criar(Papel.DIRETOR, 5),
+    RequisitoPapel.criar(Papel.EFEITOS_VISUAIS, 3),
+    RequisitoPapel.criar(Papel.SONOPLASTA, 3),
+    RequisitoPapel.criar(Papel.EDITOR, 3),
+  ];
+  const linhas: Record<string, string | undefined>[] = [];
+
+  passo('Mesmo cadastro, mesmos papéis e mesmo orçamento; só o tipo do projeto muda:');
+  for (const tipo of TIPOS_CAPTACAO) {
+    const projeto = criarProjeto({
+      tipoCaptacao: tipo,
+      produtorId: `produtor-${tipo.toLowerCase()}`,
+      orcamento: 200_000,
+      requisitos,
+      detalhes: DETALHES_MULTITIPO[tipo],
+      estrategia: sistema.estrategiaSugerida(tipo, 200_000),
+    });
+    const resultado = await sistema.executarRecomendacao(projeto);
+    await barramento.aguardarEntregas();
+    const equipe = resultado.equipes[0];
+    linhas.push({
+      tipo,
+      recomendador: resultado.estrategia,
+      diretor: equipe?.membro(Papel.DIRETOR)?.profissional.nome,
+      efeitos: equipe?.membro(Papel.EFEITOS_VISUAIS)?.profissional.nome,
+      som: equipe?.membro(Papel.SONOPLASTA)?.profissional.nome,
+      notificacao: caixa.mensagensDe(projeto.produtorId)[0]?.assunto,
+    });
+  }
+  console.table(linhas);
+
+  passo('As regras do tipo barram a orquestração antes de buscar candidatos:');
+  try {
+    await sistema.executarRecomendacao(
+      criarProjeto({ tipoCaptacao: TipoCaptacao.DOCUMENTARIO, detalhes: { tema: 'Rios' } }),
+    );
+  } catch (erro) {
+    console.info(`Documentário sem entrevistados: ${(erro as Error).message}`);
+  }
+
+  passo('Tipo novo (realidade virtual) registrando só uma fábrica nova:');
+  fabricas.registrar(new FabricaRealidadeVirtual({ caixa }));
+  const imersivo = fabricas.para(TIPO_REALIDADE_VIRTUAL).criarProjeto({
+    ...dadosProjetoBase({
+      orcamento: 200_000,
+      requisitos,
+      estrategia: sistema.estrategiaSugerida(TIPO_REALIDADE_VIRTUAL, 200_000),
+    }),
+    detalhes: { plataformas: ['Meta Quest'] },
+  });
+  const resultado = await sistema.executarRecomendacao(imersivo);
+  console.info(
+    `${imersivo.constructor.name}: recomendador ${resultado.estrategia}, diretor ${resultado.equipes[0]?.membro(Papel.DIRETOR)?.profissional.nome ?? '-'}. Nenhuma linha do orquestrador mudou.`,
+  );
+}
+
 await demonstrarStrategy();
 await demonstrarTemplateMethod();
 await demonstrarObserver();
 await demonstrarVisitor();
+await demonstrarPrototype();
+await demonstrarFactoryMethod();
+await demonstrarAbstractFactory();
 console.info('\nDemonstração concluída.');

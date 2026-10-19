@@ -23,6 +23,7 @@ const EsquemaAmbiente = Type.Object({
   CADASTRO_TIMEOUT_MS: Type.Integer({ minimum: 100, maximum: 120_000, default: 10_000 }),
   CIRCUITO_LIMITE_FALHAS: Type.Integer({ minimum: 1, maximum: 100, default: 3 }),
   CIRCUITO_ESPERA_MS: Type.Integer({ minimum: 100, maximum: 3_600_000, default: 10_000 }),
+  CONVITES_VARREDURA_MS: Type.Integer({ minimum: 1_000, maximum: 86_400_000, default: 60_000 }),
 });
 
 type Ambiente = Static<typeof EsquemaAmbiente>;
@@ -53,6 +54,7 @@ export interface Config {
   log: { nivel: NivelLog };
   banco: ConfigBanco;
   resiliencia: ConfigResiliencia;
+  convites: { varreduraMs: number };
 }
 
 export class ErroConfiguracao extends Error {
@@ -110,5 +112,6 @@ function mapearConfig(ambiente: Ambiente): Config {
       circuitoLimiteFalhas: ambiente.CIRCUITO_LIMITE_FALHAS,
       circuitoEsperaMs: ambiente.CIRCUITO_ESPERA_MS,
     },
+    convites: { varreduraMs: ambiente.CONVITES_VARREDURA_MS },
   };
 }

@@ -16,6 +16,7 @@ export interface ProjetoRow {
   longitude: number;
   estrategia: string;
   criado_em: Date;
+  detalhes: Record<string, unknown>;
 }
 
 export interface RequisitoPapelRow {
@@ -99,6 +100,7 @@ export const ProjetoSchema = new EntitySchema<ProjetoRow>({
     longitude: { type: 'double precision' },
     estrategia: { type: 'varchar', length: 64 },
     criado_em: { type: 'timestamptz' },
+    detalhes: { type: 'jsonb', default: () => "'{}'::jsonb" },
   },
 });
 

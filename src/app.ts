@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify, { type FastifyBaseLogger } from 'fastify';
 import { tratarErro } from './api/erros/tratador-erros.js';
 import { rotasConvitesECatalogo } from './api/routes/convites.routes.js';
+import { rotasTiposEModelos } from './api/routes/modelos.routes.js';
 import { rotasProjetos } from './api/routes/projetos.routes.js';
 import { rotasSaude } from './api/routes/saude.routes.js';
 import { RespostaErro } from './api/schemas/comum.schema.js';
@@ -20,11 +22,20 @@ export interface OpcoesApp {
   logger?: FastifyBaseLogger;
 }
 
+export const ID_REQUISICAO_ACEITO = /^[A-Za-z0-9._:-]{1,64}$/;
+
+export function idDaRequisicao(requisicao: IncomingMessage): string {
+  const informado = requisicao.headers['x-request-id'];
+  return typeof informado === 'string' && ID_REQUISICAO_ACEITO.test(informado)
+    ? informado
+    : randomUUID();
+}
+
 export async function construirApp(dependencias: DependenciasApi, opcoes: OpcoesApp = {}) {
   const app = Fastify({
     ...(opcoes.logger ? { loggerInstance: opcoes.logger } : { logger: false }),
-    requestIdHeader: 'x-request-id',
-    genReqId: () => randomUUID(),
+    requestIdHeader: false,
+    genReqId: idDaRequisicao,
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -39,7 +50,7 @@ export async function construirApp(dependencias: DependenciasApi, opcoes: Opcoes
       info: {
         title: 'CineBridge - Recomendação e Orquestração de Equipes',
         description:
-          'Microsserviço que recomenda e orquestra equipes audiovisuais usando Strategy, Template Method, Observer e Visitor.',
+          'Microsserviço que recomenda e orquestra equipes audiovisuais usando Strategy, Template Method, Observer, Visitor, Prototype, Factory Method e Abstract Factory.',
         version: '1.0.0',
       },
       tags: [
@@ -48,6 +59,10 @@ export async function construirApp(dependencias: DependenciasApi, opcoes: Opcoes
         { name: 'convites', description: 'Resposta dos profissionais' },
         { name: 'relatorios', description: 'Visitors e auditoria' },
         { name: 'catalogo', description: 'Estratégias e mensagens internas' },
+        {
+          name: 'tipos-e-modelos',
+          description: 'Fábricas por tipo de projeto e modelos clonáveis',
+        },
         { name: 'saude', description: 'Estado do serviço' },
       ],
     },
@@ -57,6 +72,7 @@ export async function construirApp(dependencias: DependenciasApi, opcoes: Opcoes
   await app.register(rotasSaude(dependencias.consultarSaude));
   await app.register(rotasProjetos(dependencias.casos));
   await app.register(rotasConvitesECatalogo(dependencias.casos));
+  await app.register(rotasTiposEModelos(dependencias.casos));
 
   return app;
 }

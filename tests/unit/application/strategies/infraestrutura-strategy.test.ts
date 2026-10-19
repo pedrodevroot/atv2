@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ErroAplicacao } from '../../../../src/application/erros/erro-aplicacao.js';
+import { AJUSTES_PERFIL_ANIMACAO } from '../../../../src/application/familias/animacao/recomendador-animacao.js';
+import { AJUSTES_PERFIL_DOCUMENTARIO } from '../../../../src/application/familias/documentario/recomendador-documentario.js';
 import { CatalogoPerfis } from '../../../../src/application/strategies/catalogo-perfis.js';
 import type { EstrategiaRecomendacao } from '../../../../src/application/strategies/estrategia-recomendacao.js';
 import {
@@ -12,6 +14,7 @@ import {
 } from '../../../../src/application/strategies/filtros-candidato.js';
 import {
   PARAMETROS_PADRAO,
+  VALOR_MAXIMO_PARAMETRO,
   resolverParametros,
 } from '../../../../src/application/strategies/parametros-recomendacao.js';
 import {
@@ -26,8 +29,8 @@ import {
   ranquearPorPapel,
 } from '../../../../src/application/strategies/ranqueador.js';
 import { RegistroEstrategias } from '../../../../src/application/strategies/registro-estrategias.js';
+import { ORCAMENTO_MAXIMO } from '../../../../src/domain/entidades/projeto.js';
 import { Papel } from '../../../../src/domain/enums/papel.js';
-import { TipoCaptacao } from '../../../../src/domain/enums/tipo-captacao.js';
 import { FaixaPreco } from '../../../../src/domain/value-objects/faixa-preco.js';
 import { Intervalo } from '../../../../src/domain/value-objects/intervalo.js';
 import { criarRegistroEstrategias } from '../../../../src/container.js';
@@ -48,11 +51,43 @@ describe('resolverParametros', () => {
       'orquestracao.numeroSugestoes deve ser inteiro entre 1 e 10',
     );
     expect(() => resolverParametros({ orquestracao: { scoreMinimo: 1.5 } })).toThrow(
-      'orquestracao.scoreMinimo deve ser <= 1',
+      'orquestracao.scoreMinimo deve ser um número entre 0 e 1',
     );
     expect(() => resolverParametros({ orquestracao: { custoMinimoPorPapel: -1 } })).toThrow(
-      'orquestracao.custoMinimoPorPapel deve ser um número >= 0',
+      `orquestracao.custoMinimoPorPapel deve ser um número entre 0 e ${ORCAMENTO_MAXIMO}`,
     );
+    expect(() => resolverParametros({ orquestracao: { numeroSugestoes: -1 } })).toThrow(
+      'Parâmetros inválidos: orquestracao.numeroSugestoes deve ser inteiro entre 1 e 10.',
+    );
+  });
+
+  it('mantém a média a priori na escala das notas e limita os demais números', () => {
+    expect(() => resolverParametros({ colaborativa: { mediaPriori: 0 } })).toThrow(
+      'colaborativa.mediaPriori deve ser um número entre 1 e 5',
+    );
+    expect(() => resolverParametros({ colaborativa: { mediaPriori: 5.5 } })).toThrow(
+      'colaborativa.mediaPriori deve ser um número entre 1 e 5',
+    );
+    expect(() =>
+      resolverParametros({ colaborativa: { pesoPriori: VALOR_MAXIMO_PARAMETRO + 1 } }),
+    ).toThrow(`colaborativa.pesoPriori deve ser um número entre 0 e ${VALOR_MAXIMO_PARAMETRO}`);
+    expect(() => resolverParametros({ cosseno: { pesoSimilaridade: 1e308 } })).toThrow(
+      'cosseno.pesoSimilaridade deve ser um número entre 0',
+    );
+    expect(() => resolverParametros({ folgaTetoPapel: Number.POSITIVE_INFINITY })).toThrow(
+      'folgaTetoPapel deve ser um número entre 0',
+    );
+    expect(() =>
+      resolverParametros({ orcamento: { limiteOrcamentoReduzido: ORCAMENTO_MAXIMO + 1 } }),
+    ).toThrow(`orcamento.limiteOrcamentoReduzido deve ser um número entre 0 e ${ORCAMENTO_MAXIMO}`);
+    expect(
+      resolverParametros({
+        folgaTetoPapel: VALOR_MAXIMO_PARAMETRO,
+        colaborativa: { mediaPriori: 1, pesoPriori: VALOR_MAXIMO_PARAMETRO },
+        orcamento: { limiteOrcamentoReduzido: ORCAMENTO_MAXIMO },
+        orquestracao: { scoreMinimo: 1, custoMinimoPorPapel: ORCAMENTO_MAXIMO },
+      }).colaborativa.mediaPriori,
+    ).toBe(1);
   });
 
   it('rejeita topN, números negativos e pesos todos zerados', () => {
@@ -169,17 +204,24 @@ describe('Pontuação', () => {
 });
 
 describe('CatalogoPerfis', () => {
-  it('aplica ajustes do tipo de captação sem valores negativos e reaproveita o cache', () => {
-    const catalogo = new CatalogoPerfis();
-    const documentario = catalogo.perfilPara(Papel.DIRETOR, TipoCaptacao.DOCUMENTARIO);
+  it('aplica os ajustes recebidos sem valores negativos e reaproveita o cache', () => {
+    const catalogo = new CatalogoPerfis(AJUSTES_PERFIL_DOCUMENTARIO);
+    const documentario = catalogo.perfilPara(Papel.DIRETOR);
 
     expect(documentario.valor('entrevista')).toBeCloseTo(0.9);
     expect(documentario.valor('direcao-de-atores')).toBeCloseTo(0.4);
-    expect(catalogo.perfilPara(Papel.DIRETOR, TipoCaptacao.DOCUMENTARIO)).toBe(documentario);
-    expect(catalogo.perfilPara(Papel.EDITOR, TipoCaptacao.DOCUMENTARIO).valor('montagem')).toBe(1);
+    expect(catalogo.perfilPara(Papel.DIRETOR)).toBe(documentario);
+    expect(catalogo.perfilPara(Papel.EDITOR).valor('montagem')).toBe(1);
     expect(
-      catalogo.perfilPara(Papel.DIRETOR, TipoCaptacao.ANIMACAO).valor('direcao-de-atores'),
+      new CatalogoPerfis(AJUSTES_PERFIL_ANIMACAO)
+        .perfilPara(Papel.DIRETOR)
+        .valor('direcao-de-atores'),
     ).toBeCloseTo(0.4);
+  });
+
+  it('sem ajustes devolve o perfil base, que não depende do tipo de projeto', () => {
+    expect(new CatalogoPerfis().perfilPara(Papel.DIRETOR).valor('direcao-de-atores')).toBe(1);
+    expect(new CatalogoPerfis().perfilPara(Papel.DIRETOR).valor('entrevista')).toBe(0);
   });
 });
 

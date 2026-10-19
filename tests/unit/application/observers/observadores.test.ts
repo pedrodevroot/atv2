@@ -44,7 +44,7 @@ describe('comporNotificacoes', () => {
       destinatarioId: 'produtor-1',
       assunto: 'Convite aceito para EDITOR',
     });
-    expect(recusado?.corpo).toContain('nova rodada de recomendações');
+    expect(recusado?.corpo).toContain('O sistema vai buscar um substituto para EDITOR.');
   });
 
   it('avisa o convidado e todos os membros da equipe formada', () => {

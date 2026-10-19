@@ -1,8 +1,9 @@
 import { avaliarPrecisao } from '../../src/application/avaliacao/precisao.js';
 import type { EstrategiaRecomendacao } from '../../src/application/strategies/estrategia-recomendacao.js';
 import { resolverParametros } from '../../src/application/strategies/parametros-recomendacao.js';
-import { criarRegistroEstrategias } from '../../src/container.js';
+import { criarRegistroEstrategias, criarRegistroFabricas } from '../../src/container.js';
 import { gerarCadastroComQualidade } from '../../src/infrastructure/database/seeds/gerador-cadastro.js';
+import { CaixaMensagensMemoria } from '../../src/infrastructure/notifications/canais-simulados.js';
 import { gerarProjetosSinteticos } from '../fixtures/projetos-sinteticos.js';
 
 const total = Number(process.env.PRECISAO_PROFISSIONAIS ?? 10_000);
@@ -11,6 +12,16 @@ const k = 5;
 
 const registro = criarRegistroEstrategias();
 const estrategia = (nome: string) => registro.obter(nome);
+const fabricas = criarRegistroFabricas({ caixa: new CaixaMensagensMemoria() });
+const recomendadorDoTipo: EstrategiaRecomendacao = {
+  nome: 'recomendador-do-tipo',
+  descricao: 'Usa o recomendador fabricado para o tipo de cada projeto (padrão da ATVII).',
+  recomendar: (projeto, profissionais, parametros) =>
+    fabricas
+      .para(projeto.tipoCaptacao)
+      .criarRecomendador()
+      .recomendar(projeto, profissionais, parametros),
+};
 const aleatoria: EstrategiaRecomendacao = {
   nome: 'aleatoria',
   descricao: 'Linha de base: sorteia candidatos elegíveis.',
@@ -46,6 +57,11 @@ const resultados = avaliarPrecisao({
     {
       rotulo: 'linha de base (aleatória)',
       estrategia: aleatoria,
+      parametros: resolverParametros(),
+    },
+    {
+      rotulo: 'recomendador do tipo do projeto (padrão da ATVII)',
+      estrategia: recomendadorDoTipo,
       parametros: resolverParametros(),
     },
     {

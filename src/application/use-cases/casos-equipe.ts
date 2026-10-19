@@ -12,6 +12,8 @@ import {
   type DependenciasCasosDeUso,
 } from './dependencias.js';
 
+export const ORIGEM_EXPIRACAO = 'expiracao-convites';
+
 export interface AlvoMembro {
   readonly projetoId: string;
   readonly equipeId: string;
@@ -33,9 +35,9 @@ abstract class CasoDeEquipe {
     }
   }
 
-  protected publicar(eventos: readonly EventoRecomendacao[]): void {
+  protected publicar(eventos: readonly EventoRecomendacao[], projeto?: Projeto): void {
     for (const evento of eventos) {
-      this.deps.sujeito.notificarObservadores(evento);
+      this.deps.sistema.notificarObservadores(evento, projeto);
     }
   }
 }
@@ -64,21 +66,24 @@ export class AceitarMembro extends CasoDeEquipe {
     });
     await this.deps.projetos.salvar(projeto);
     await this.deps.convites.salvar(convite);
-    this.publicar([
-      criarEvento(
-        'CONVITE_ENVIADO',
-        {
-          conviteId: convite.id,
-          projetoId: projeto.id,
-          produtorId: projeto.produtorId,
-          equipeId: alvo.equipeId,
-          papel: alvo.papel,
-          profissionalId: membro.profissional.id,
-          expiraEm: convite.expiraEm.toISOString(),
-        },
-        this.opcoesEvento(contexto),
-      ),
-    ]);
+    this.publicar(
+      [
+        criarEvento(
+          'CONVITE_ENVIADO',
+          {
+            conviteId: convite.id,
+            projetoId: projeto.id,
+            produtorId: projeto.produtorId,
+            equipeId: alvo.equipeId,
+            papel: alvo.papel,
+            profissionalId: membro.profissional.id,
+            expiraEm: convite.expiraEm.toISOString(),
+          },
+          this.opcoesEvento(contexto),
+        ),
+      ],
+      projeto,
+    );
     return { projeto, convite };
   }
 }
@@ -93,19 +98,22 @@ export class RejeitarMembro extends CasoDeEquipe {
     const rejeitado = projeto.rejeitarRecomendacao(alvo.equipeId, alvo.papel);
     await this.deps.projetos.salvar(projeto);
     await this.cancelarConvitePendente(alvo.equipeId, alvo.papel);
-    this.publicar([
-      criarEvento(
-        'MEMBRO_REJEITADO',
-        {
-          projetoId: projeto.id,
-          produtorId: projeto.produtorId,
-          equipeId: alvo.equipeId,
-          papel: alvo.papel,
-          profissionalId: rejeitado.profissional.id,
-        },
-        this.opcoesEvento(contexto),
-      ),
-    ]);
+    this.publicar(
+      [
+        criarEvento(
+          'MEMBRO_REJEITADO',
+          {
+            projetoId: projeto.id,
+            produtorId: projeto.produtorId,
+            equipeId: alvo.equipeId,
+            papel: alvo.papel,
+            profissionalId: rejeitado.profissional.id,
+          },
+          this.opcoesEvento(contexto),
+        ),
+      ],
+      projeto,
+    );
     return projeto;
   }
 }
@@ -124,63 +132,93 @@ export class SubstituirMembro extends CasoDeEquipe {
     opcoes: { estrategia?: string },
     contexto: ContextoRequisicao,
   ): Promise<{ projeto: Projeto; resultado: ResultadoOrquestracao }> {
-    const { projetos, estrategias, orquestradorSubstituicao, recomendacoes, parametros } =
-      this.deps;
+    const { projetos, sistema, recomendacoes } = this.deps;
     const projeto = await obterProjeto(projetos, alvo.projetoId);
     const anterior = projeto.equipe(alvo.equipeId).membro(alvo.papel);
-    const estrategia = estrategias.resolver(projeto, opcoes.estrategia);
 
-    const resultado = await orquestradorSubstituicao.orquestrar({
+    const resultado = await sistema.substituir(
       projeto,
-      estrategia,
-      parametros,
-      equipeId: alvo.equipeId,
-      papel: alvo.papel,
-    });
+      { equipeId: alvo.equipeId, papel: alvo.papel },
+      opcoes.estrategia ? { estrategia: opcoes.estrategia } : {},
+    );
     await projetos.salvar(projeto);
     await this.cancelarConvitePendente(alvo.equipeId, alvo.papel);
     await recomendacoes.salvarTodas(resultado.recomendacoes);
 
     const novo = projeto.equipe(alvo.equipeId).membro(alvo.papel);
     const opcoesEvento = this.opcoesEvento(contexto);
-    this.publicar([
-      criarEvento(
-        'SUBSTITUICAO_SOLICITADA',
-        {
-          projetoId: projeto.id,
-          produtorId: projeto.produtorId,
-          equipeId: alvo.equipeId,
-          papel: alvo.papel,
-          ...(anterior ? { profissionalAnteriorId: anterior.profissional.id } : {}),
-        },
-        opcoesEvento,
-      ),
-      ...(novo && novo !== anterior
-        ? [
-            eventoRecomendacaoGerada(
-              {
-                projeto,
-                equipes: resultado.equipes,
-                membros: [novo],
-                estrategia: estrategia.nome,
-                rodada: resultado.rodada,
-                parcial: resultado.parcial,
-              },
-              opcoesEvento,
-            ),
-          ]
-        : []),
-    ]);
+    this.publicar(
+      [
+        criarEvento(
+          'SUBSTITUICAO_SOLICITADA',
+          {
+            projetoId: projeto.id,
+            produtorId: projeto.produtorId,
+            equipeId: alvo.equipeId,
+            papel: alvo.papel,
+            ...(anterior ? { profissionalAnteriorId: anterior.profissional.id } : {}),
+          },
+          opcoesEvento,
+        ),
+        ...(novo && novo !== anterior
+          ? [
+              eventoRecomendacaoGerada(
+                {
+                  projeto,
+                  equipes: resultado.equipes,
+                  membros: [novo],
+                  estrategia: resultado.estrategia,
+                  rodada: resultado.rodada,
+                  parcial: resultado.parcial,
+                },
+                opcoesEvento,
+              ),
+            ]
+          : []),
+      ],
+      projeto,
+    );
     return { projeto, resultado };
   }
 }
 
+export class ExpirarConvites extends CasoDeEquipe {
+  async executar(contexto: ContextoRequisicao): Promise<Convite[]> {
+    const vencidos = await this.deps.convites.expirarVencidos(this.deps.relogio());
+    this.publicar(
+      vencidos.map((convite) =>
+        criarEvento(
+          'CONVITE_EXPIRADO',
+          {
+            conviteId: convite.id,
+            projetoId: convite.projetoId,
+            produtorId: convite.produtorId,
+            equipeId: convite.equipeId,
+            papel: convite.papel,
+            profissionalId: convite.profissionalId,
+          },
+          { origem: ORIGEM_EXPIRACAO, ...contexto },
+        ),
+      ),
+    );
+    return vencidos;
+  }
+}
+
 export class ResponderConvite extends CasoDeEquipe {
+  constructor(
+    deps: DependenciasCasosDeUso,
+    private readonly expirarConvites: ExpirarConvites,
+  ) {
+    super(deps);
+  }
+
   async executar(
     conviteId: string,
     aceito: boolean,
     contexto: ContextoRequisicao,
   ): Promise<Convite> {
+    await this.expirarConvites.executar(contexto);
     const convite = await this.deps.convites.obter(conviteId);
     if (!convite) {
       throw naoEncontrado('Convite', conviteId);
@@ -223,25 +261,32 @@ export class FinalizarEquipe extends CasoDeEquipe {
     contexto: ContextoRequisicao,
   ): Promise<{ projeto: Projeto; equipe: Equipe }> {
     const projeto = await obterProjeto(this.deps.projetos, projetoId);
+    const descartadas = projeto.equipesAtivas
+      .filter((ativa) => ativa.id !== equipeId)
+      .map((ativa) => ativa.id);
     const equipe = projeto.finalizarEquipe(equipeId);
     await this.deps.projetos.salvar(projeto);
-    this.publicar([
-      criarEvento(
-        'EQUIPE_FORMADA',
-        {
-          projetoId: projeto.id,
-          produtorId: projeto.produtorId,
-          equipeId: equipe.id,
-          custoTotal: equipe.custoTotal,
-          membros: equipe.membros.map((membro) => ({
-            papel: membro.papel,
-            profissionalId: membro.profissional.id,
-            custo: membro.custo,
-          })),
-        },
-        this.opcoesEvento(contexto),
-      ),
-    ]);
+    await this.deps.convites.cancelarPendentesDasEquipes(descartadas);
+    this.publicar(
+      [
+        criarEvento(
+          'EQUIPE_FORMADA',
+          {
+            projetoId: projeto.id,
+            produtorId: projeto.produtorId,
+            equipeId: equipe.id,
+            custoTotal: equipe.custoTotal,
+            membros: equipe.membros.map((membro) => ({
+              papel: membro.papel,
+              profissionalId: membro.profissional.id,
+              custo: membro.custo,
+            })),
+          },
+          this.opcoesEvento(contexto),
+        ),
+      ],
+      projeto,
+    );
     return { projeto, equipe };
   }
 }

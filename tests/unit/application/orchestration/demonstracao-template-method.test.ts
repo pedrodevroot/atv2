@@ -11,7 +11,11 @@ import type { Profissional } from '../../../../src/domain/entidades/profissional
 import { Papel } from '../../../../src/domain/enums/papel.js';
 import { criarProjetoDemonstracao } from '../../../fixtures/cadastro-demonstracao.js';
 import { criarProjeto } from '../../../fixtures/dominio.js';
-import { criarAmbienteOrquestracao, relogioFixo } from '../../../fixtures/orquestracao.js';
+import {
+  criarAmbienteOrquestracao,
+  fabricaFiccao,
+  relogioFixo,
+} from '../../../fixtures/orquestracao.js';
 
 class OrquestradorEspiao extends OrquestradorPadrao {
   readonly chamadas: string[] = [];
@@ -42,8 +46,8 @@ describe('Demonstração do Template Method: o fluxo principal é invariável', 
   it('OrquestradorPadrao e OrquestradorSubstituicao executam exatamente a mesma sequência de etapas', async () => {
     const { repositorio, parametros, cosseno } = criarAmbienteOrquestracao();
     const projeto = criarProjetoDemonstracao();
-    const padrao = new OrquestradorPadrao(repositorio, relogioFixo);
-    const substituicao = new OrquestradorSubstituicao(repositorio, relogioFixo);
+    const padrao = new OrquestradorPadrao(repositorio, fabricaFiccao, relogioFixo);
+    const substituicao = new OrquestradorSubstituicao(repositorio, fabricaFiccao, relogioFixo);
 
     const resultadoPadrao = await padrao.orquestrar({ projeto, estrategia: cosseno, parametros });
     const [equipe] = resultadoPadrao.equipes;
@@ -74,7 +78,7 @@ describe('Demonstração do Template Method: o fluxo principal é invariável', 
 
   it('as subclasses só preenchem os passos; quem chama cada passo, e em que ordem, é o método-template', async () => {
     const { repositorio, parametros, cosseno } = criarAmbienteOrquestracao();
-    const espiao = new OrquestradorEspiao(repositorio, relogioFixo);
+    const espiao = new OrquestradorEspiao(repositorio, fabricaFiccao, relogioFixo);
     const buscar = vi.spyOn(repositorio, 'buscarCandidatos');
     const recomendar = vi.spyOn(cosseno, 'recomendar');
 
@@ -94,7 +98,7 @@ describe('Demonstração do Template Method: o fluxo principal é invariável', 
 
   it('uma falha em validarRestricoes interrompe o fluxo antes de buscar e ranquear', async () => {
     const { repositorio, parametros, cosseno } = criarAmbienteOrquestracao();
-    const espiao = new OrquestradorEspiao(repositorio, relogioFixo);
+    const espiao = new OrquestradorEspiao(repositorio, fabricaFiccao, relogioFixo);
     const buscar = vi.spyOn(repositorio, 'buscarCandidatos');
     const recomendar = vi.spyOn(cosseno, 'recomendar');
     const projetoSemOrcamento = criarProjeto({ orcamento: 1_500 });
@@ -117,7 +121,7 @@ describe('Demonstração do Template Method: o fluxo principal é invariável', 
       }
     }
 
-    expect(() => new Atalho(repositorio)).toThrow(
+    expect(() => new Atalho(repositorio, fabricaFiccao)).toThrow(
       expect.objectContaining({
         codigo: 'FLUXO_INVARIAVEL',
         message: 'Atalho não pode sobrescrever orquestrar(): o fluxo principal é invariável.',
@@ -127,7 +131,7 @@ describe('Demonstração do Template Method: o fluxo principal é invariável', 
 
   it('trocar a estratégia muda a equipe, mas não o fluxo', async () => {
     const { repositorio, parametros, registro } = criarAmbienteOrquestracao();
-    const orquestrador = new OrquestradorPadrao(repositorio, relogioFixo);
+    const orquestrador = new OrquestradorPadrao(repositorio, fabricaFiccao, relogioFixo);
     const diretorDa = async (nome: string) => {
       const resultado = await orquestrador.orquestrar({
         projeto: criarProjetoDemonstracao(),

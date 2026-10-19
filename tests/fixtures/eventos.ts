@@ -39,7 +39,9 @@ export function eventoEquipeFormada(): EventoDoTipo<'EQUIPE_FORMADA'> {
   );
 }
 
-export function eventoRespostaConvite<T extends 'CONVITE_ACEITO' | 'CONVITE_RECUSADO'>(
+export function eventoRespostaConvite<
+  T extends 'CONVITE_ACEITO' | 'CONVITE_RECUSADO' | 'CONVITE_EXPIRADO',
+>(
   tipo: T,
   dados: { projetoId: string; equipeId: string; papel: Papel; profissionalId: string },
 ): EventoDoTipo<T> {

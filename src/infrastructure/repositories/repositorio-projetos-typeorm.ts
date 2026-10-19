@@ -1,5 +1,6 @@
 import type { DataSource, EntityManager } from 'typeorm';
 import { conflitoConcorrencia } from '../../application/erros/erro-aplicacao.js';
+import type { RegistroFabricas } from '../../application/familias/registro-fabricas.js';
 import type { RepositorioProjetos } from '../../application/ports/repositorio-projetos.js';
 import type { Projeto } from '../../domain/entidades/projeto.js';
 import { inserir, inserirOuAtualizar } from '../database/escrita.js';
@@ -21,6 +22,7 @@ export class RepositorioProjetosTypeorm implements RepositorioProjetos {
   constructor(
     private readonly dataSource: DataSource,
     private readonly profissionais: RepositorioProfissionaisTypeorm,
+    private readonly fabricas: RegistroFabricas,
   ) {}
 
   async obter(id: string): Promise<Projeto | undefined> {
@@ -49,7 +51,11 @@ export class RepositorioProjetosTypeorm implements RepositorioProjetos {
     const profissionais = await this.profissionais.obterPorIds(
       membros.map((membro) => membro.profissional_id),
     );
-    const reconstruido = paraProjeto({ projeto, requisitos, equipes, membros }, profissionais);
+    const reconstruido = paraProjeto(
+      { projeto, requisitos, equipes, membros },
+      profissionais,
+      this.fabricas,
+    );
     this.versoes.set(reconstruido, projeto.versao);
     return reconstruido;
   }
@@ -94,11 +100,19 @@ export class RepositorioProjetosTypeorm implements RepositorioProjetos {
     const atualizados = await manager.query<{ versao: number }[]>(
       `WITH atualizado AS (
          UPDATE projeto
-            SET orcamento = $3, data_entrega = $4, estrategia = $5, versao = versao + 1
+            SET orcamento = $3, data_entrega = $4, estrategia = $5, detalhes = $6::jsonb,
+                versao = versao + 1
           WHERE id = $1 AND versao = $2
          RETURNING versao)
        SELECT versao FROM atualizado`,
-      [projeto.id, versaoLida, projeto.orcamento, projeto.dataEntrega, projeto.estrategia],
+      [
+        projeto.id,
+        versaoLida,
+        projeto.orcamento,
+        projeto.dataEntrega,
+        projeto.estrategia,
+        JSON.stringify(projeto.detalhes),
+      ],
     );
     if (atualizados.length === 0) {
       throw conflitoConcorrencia('Projeto', projeto.id);

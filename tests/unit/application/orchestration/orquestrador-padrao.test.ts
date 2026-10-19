@@ -11,8 +11,9 @@ import {
 } from '../../../fixtures/cadastro-demonstracao.js';
 import { criarEquipe, criarProfissional, criarProjeto } from '../../../fixtures/dominio.js';
 import {
-  ID_EDITOR_ECONOMICO,
   criarAmbienteOrquestracao,
+  fabricaFiccao,
+  ID_EDITOR_ECONOMICO,
   relogioFixo,
 } from '../../../fixtures/orquestracao.js';
 
@@ -24,7 +25,7 @@ function idsDaEquipe(equipe: {
 
 describe('OrquestradorPadrao', () => {
   const ambiente = criarAmbienteOrquestracao();
-  const orquestrador = new OrquestradorPadrao(ambiente.repositorio, relogioFixo);
+  const orquestrador = new OrquestradorPadrao(ambiente.repositorio, fabricaFiccao, relogioFixo);
   const entrada = (projeto = criarProjetoDemonstracao(), parametros = ambiente.parametros) => ({
     projeto,
     estrategia: ambiente.cosseno,
@@ -86,9 +87,11 @@ describe('OrquestradorPadrao', () => {
       ],
     });
 
-    const resultado = await new OrquestradorPadrao(repositorio, relogioFixo).orquestrar(
-      entrada(projeto),
-    );
+    const resultado = await new OrquestradorPadrao(
+      repositorio,
+      fabricaFiccao,
+      relogioFixo,
+    ).orquestrar(entrada(projeto));
 
     for (const equipe of resultado.equipes) {
       const ids = equipe.membros.map((membro) => membro.profissional.id);
@@ -161,9 +164,11 @@ describe('OrquestradorPadrao', () => {
         }),
     };
 
-    const resultado = await new OrquestradorPadrao(repositorioDegradado, relogioFixo).orquestrar(
-      entrada(criarProjeto()),
-    );
+    const resultado = await new OrquestradorPadrao(
+      repositorioDegradado,
+      fabricaFiccao,
+      relogioFixo,
+    ).orquestrar(entrada(criarProjeto()));
 
     expect(resultado.parcial).toBe(true);
     expect(resultado.avisos[0]).toBe('Repositório indisponível; usando cache.');
@@ -194,9 +199,11 @@ describe('OrquestradorPadrao', () => {
         }),
     };
 
-    const resultado = await new OrquestradorPadrao(repositorio, relogioFixo).orquestrar(
-      entrada(criarProjeto()),
-    );
+    const resultado = await new OrquestradorPadrao(
+      repositorio,
+      fabricaFiccao,
+      relogioFixo,
+    ).orquestrar(entrada(criarProjeto()));
 
     expect(
       (resultado.ranking.get(Papel.DIRETOR) ?? []).map((candidato) => candidato.profissional.id),

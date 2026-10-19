@@ -67,6 +67,12 @@ export class BarramentoEventosEmMemoria implements Sujeito {
     this.emissor.emit(TODOS_OS_EVENTOS, evento);
   }
 
+  notificarObservador(observador: Observador, evento: EventoRecomendacao): void {
+    if (observador.interesses === TODOS_OS_EVENTOS || observador.interesses.includes(evento.tipo)) {
+      this.entregar(observador, evento);
+    }
+  }
+
   async aguardarEntregas(): Promise<void> {
     while (this.pendentes.size > 0) {
       await Promise.allSettled([...this.pendentes]);

@@ -73,6 +73,28 @@ describe('API HTTP', () => {
     expect(resposta.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('troca por um id gerado o x-request-id longo demais ou com caracteres inválidos', async () => {
+    const longo = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { 'x-request-id': 'r'.repeat(65) },
+    });
+    const invalido = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { 'x-request-id': 'id com espaço\n' },
+    });
+    const limite = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { 'x-request-id': 'r'.repeat(64) },
+    });
+
+    expect(longo.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(invalido.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(limite.headers['x-request-id']).toBe('r'.repeat(64));
+  });
+
   it('publica a documentação OpenAPI com a rota de saúde', async () => {
     const resposta = await app.inject({ method: 'GET', url: '/docs/json' });
     const documento = resposta.json<{ paths: Record<string, unknown> }>();

@@ -1,11 +1,13 @@
 import type { Projeto } from '../../domain/entidades/projeto.js';
 import type { Recomendacao } from '../../domain/entidades/recomendacao.js';
+import type { FabricaProjeto } from '../familias/fabrica-projeto.js';
 import type { EntradaAuditoria, Notificacao } from '../ports/canais-saida.js';
+import type { ModeloProjeto } from '../prototipos/catalogo-modelos.js';
 import type { EstrategiaRecomendacao } from '../strategies/estrategia-recomendacao.js';
 import { CalculadorCompatibilidade } from '../visitors/calculador-compatibilidade.js';
-import { GeradorRelatorio } from '../visitors/gerador-relatorio.js';
 import {
   ValidadorConsistencia,
+  combinarValidacoes,
   type ResultadoValidacao,
 } from '../visitors/validador-consistencia.js';
 import { obterProjeto, type DependenciasCasosDeUso } from './dependencias.js';
@@ -39,16 +41,28 @@ export class ConsultasRecomendacao {
   async analisar(projetoId: string, equipeId?: string): Promise<AnaliseComposicao> {
     const projeto = await this.obterProjeto(projetoId);
     const alvo = equipeId ? projeto.equipe(equipeId) : projeto;
+    const fabrica = this.deps.sistema.fabricaPara(projeto);
     return {
       projeto,
-      validacao: alvo.aceitar(new ValidadorConsistencia(projeto)),
+      validacao: combinarValidacoes([
+        alvo.aceitar(new ValidadorConsistencia(projeto)),
+        alvo.aceitar(fabrica.criarValidador()),
+      ]),
       compatibilidade: alvo.aceitar(new CalculadorCompatibilidade(projeto)),
-      relatorio: alvo.aceitar(new GeradorRelatorio(projeto, this.deps.relogio())),
+      relatorio: alvo.aceitar(fabrica.criarGeradorRelatorio(projeto, this.deps.relogio())),
     };
   }
 
   listarEstrategias(): EstrategiaRecomendacao[] {
     return this.deps.estrategias.listar();
+  }
+
+  listarTiposProjeto(): FabricaProjeto[] {
+    return this.deps.fabricas.listar();
+  }
+
+  listarModelos(): ModeloProjeto[] {
+    return this.deps.modelos.listar();
   }
 
   async listarRecomendacoes(projetoId: string): Promise<Recomendacao[]> {

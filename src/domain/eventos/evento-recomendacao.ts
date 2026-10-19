@@ -18,6 +18,13 @@ export interface DadosPorTipoEvento {
     papel: Papel;
     profissionalAnteriorId?: string;
   };
+  SUBSTITUICAO_INDISPONIVEL: {
+    projetoId: string;
+    produtorId: string;
+    equipeId: string;
+    papel: Papel;
+    motivo: string;
+  };
   MEMBRO_REJEITADO: {
     projetoId: string;
     produtorId: string;
@@ -50,12 +57,25 @@ export interface DadosPorTipoEvento {
     papel: Papel;
     profissionalId: string;
   };
+  CONVITE_EXPIRADO: {
+    conviteId: string;
+    projetoId: string;
+    produtorId: string;
+    equipeId: string;
+    papel: Papel;
+    profissionalId: string;
+  };
   REAVALIACAO_SOLICITADA: {
     projetoId: string;
     produtorId: string;
     significativa: boolean;
     variacaoOrcamento: number;
     variacaoPrazoDias: number;
+  };
+  DETALHES_ATUALIZADOS: {
+    projetoId: string;
+    produtorId: string;
+    detalhes: Record<string, unknown>;
   };
   EQUIPE_FORMADA: {
     projetoId: string;
@@ -71,11 +91,14 @@ export type TipoEvento = keyof DadosPorTipoEvento;
 export const TIPOS_EVENTO = [
   'RECOMENDACAO_GERADA',
   'SUBSTITUICAO_SOLICITADA',
+  'SUBSTITUICAO_INDISPONIVEL',
   'MEMBRO_REJEITADO',
   'CONVITE_ENVIADO',
   'CONVITE_ACEITO',
   'CONVITE_RECUSADO',
+  'CONVITE_EXPIRADO',
   'REAVALIACAO_SOLICITADA',
+  'DETALHES_ATUALIZADOS',
   'EQUIPE_FORMADA',
 ] as const satisfies readonly TipoEvento[];
 

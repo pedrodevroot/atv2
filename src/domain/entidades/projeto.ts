@@ -2,22 +2,24 @@ import { ErroDominio, garantir, garantirData, garantirTexto } from '../comum/err
 import { gerarId } from '../comum/identificador.js';
 import type { Papel } from '../enums/papel.js';
 import { StatusEquipe } from '../enums/status.js';
-import type { TipoCaptacao } from '../enums/tipo-captacao.js';
 import { Intervalo } from '../value-objects/intervalo.js';
-import type { Localizacao } from '../value-objects/localizacao.js';
+import { Localizacao } from '../value-objects/localizacao.js';
 import type { VisitanteProjeto, Visitavel } from '../visitante/visitante-projeto.js';
 import type { Equipe } from './equipe.js';
 import type { MembroEquipe } from './membro-equipe.js';
-import type { RequisitoPapel } from './requisito-papel.js';
+import { RequisitoPapel } from './requisito-papel.js';
 
 export const LIMIAR_REAVALIACAO_PADRAO = 0.15;
+export const ORCAMENTO_MAXIMO = 999_999_999_999;
+export const DURACAO_MAXIMA_MINUTOS = 100_000;
+
+export type DetalhesProjeto = Readonly<Record<string, unknown>>;
 
 export interface DadosProjeto {
   id?: string;
   titulo: string;
   produtorId: string;
   genero: string;
-  tipoCaptacao: TipoCaptacao;
   duracaoMinutos: number;
   orcamento: number;
   dataInicio: Date;
@@ -27,6 +29,26 @@ export interface DadosProjeto {
   estrategia: string;
   equipes?: readonly Equipe[];
   criadoEm?: Date;
+}
+
+export interface DadosCriacaoProjeto extends DadosProjeto {
+  detalhes?: DetalhesProjeto;
+}
+
+export interface AjustesProjeto {
+  id?: string;
+  titulo?: string;
+  produtorId?: string;
+  genero?: string;
+  duracaoMinutos?: number;
+  orcamento?: number;
+  dataInicio?: Date;
+  dataEntrega?: Date;
+  localizacao?: Localizacao;
+  requisitos?: readonly RequisitoPapel[];
+  estrategia?: string;
+  criadoEm?: Date;
+  detalhes?: DetalhesProjeto;
 }
 
 export interface AlteracaoProjeto {
@@ -40,31 +62,29 @@ export interface ResultadoReavaliacao {
   variacaoPrazoDias: number;
 }
 
-export class Projeto implements Visitavel {
+export abstract class Projeto implements Visitavel {
+  abstract readonly tipoCaptacao: string;
+  readonly id: string;
+  readonly titulo: string;
+  readonly produtorId: string;
+  readonly genero: string;
+  readonly duracaoMinutos: number;
+  readonly localizacao: Localizacao;
+  readonly requisitos: readonly RequisitoPapel[];
+  readonly criadoEm: Date;
+  private _orcamento: number;
+  private _periodo: Intervalo;
+  private _estrategia: string;
   private readonly _equipes: Equipe[];
 
-  private constructor(
-    readonly id: string,
-    readonly titulo: string,
-    readonly produtorId: string,
-    readonly genero: string,
-    readonly tipoCaptacao: TipoCaptacao,
-    readonly duracaoMinutos: number,
-    private _orcamento: number,
-    private _periodo: Intervalo,
-    readonly localizacao: Localizacao,
-    readonly requisitos: readonly RequisitoPapel[],
-    private _estrategia: string,
-    equipes: readonly Equipe[],
-    readonly criadoEm: Date,
-  ) {
-    this._equipes = [...equipes];
-  }
-
-  static criar(dados: DadosProjeto): Projeto {
+  protected constructor(dados: DadosProjeto) {
     garantir(
       Number.isInteger(dados.duracaoMinutos) && dados.duracaoMinutos > 0,
       'Duração deve ser um número inteiro de minutos maior que zero.',
+    );
+    garantir(
+      dados.duracaoMinutos <= DURACAO_MAXIMA_MINUTOS,
+      `Duração deve ser de no máximo ${DURACAO_MAXIMA_MINUTOS} minutos.`,
     );
     Projeto.validarOrcamento(dados.orcamento);
     garantir(dados.requisitos.length > 0, 'Projeto precisa de ao menos um papel obrigatório.');
@@ -80,21 +100,52 @@ export class Projeto implements Visitavel {
       'REGRA_VIOLADA',
     );
 
-    return new Projeto(
-      id,
-      garantirTexto(dados.titulo, 'Título do projeto'),
-      garantirTexto(dados.produtorId, 'Produtor do projeto'),
-      garantirTexto(dados.genero, 'Gênero do projeto'),
-      dados.tipoCaptacao,
-      dados.duracaoMinutos,
-      dados.orcamento,
-      periodo,
-      dados.localizacao,
-      [...dados.requisitos],
-      garantirTexto(dados.estrategia, 'Estratégia do projeto'),
-      equipes,
-      garantirData(dados.criadoEm ?? new Date(), 'Data de criação do projeto'),
-    );
+    this.id = id;
+    this.titulo = garantirTexto(dados.titulo, 'Título do projeto');
+    this.produtorId = garantirTexto(dados.produtorId, 'Produtor do projeto');
+    this.genero = garantirTexto(dados.genero, 'Gênero do projeto');
+    this.duracaoMinutos = dados.duracaoMinutos;
+    this._orcamento = dados.orcamento;
+    this._periodo = periodo;
+    this.localizacao = dados.localizacao;
+    this.requisitos = [...dados.requisitos];
+    this._estrategia = garantirTexto(dados.estrategia, 'Estratégia do projeto');
+    this._equipes = [...equipes];
+    this.criadoEm = garantirData(dados.criadoEm ?? new Date(), 'Data de criação do projeto');
+  }
+
+  abstract get detalhes(): DetalhesProjeto;
+
+  abstract clonar(ajustes?: AjustesProjeto): Projeto;
+
+  ajustarDetalhes(novos: DetalhesProjeto): void {
+    this.garantirSemEquipeFormada();
+    this.aplicarDetalhes({ ...this.detalhes, ...novos });
+  }
+
+  protected abstract aplicarDetalhes(detalhes: DetalhesProjeto): void;
+
+  protected dadosDoClone(ajustes: AjustesProjeto): DadosProjeto {
+    return {
+      id: ajustes.id ?? gerarId(),
+      titulo: ajustes.titulo ?? this.titulo,
+      produtorId: ajustes.produtorId ?? this.produtorId,
+      genero: ajustes.genero ?? this.genero,
+      duracaoMinutos: ajustes.duracaoMinutos ?? this.duracaoMinutos,
+      orcamento: ajustes.orcamento ?? this._orcamento,
+      dataInicio: new Date((ajustes.dataInicio ?? this._periodo.inicio).getTime()),
+      dataEntrega: new Date((ajustes.dataEntrega ?? this._periodo.fim).getTime()),
+      localizacao: Localizacao.criar(ajustes.localizacao ?? this.localizacao),
+      requisitos: (ajustes.requisitos ?? this.requisitos).map((requisito) =>
+        RequisitoPapel.criar(requisito.papel, requisito.peso),
+      ),
+      estrategia: ajustes.estrategia ?? this._estrategia,
+      criadoEm: ajustes.criadoEm ?? new Date(),
+    };
+  }
+
+  protected detalhesDoClone(ajustes: AjustesProjeto): DetalhesProjeto {
+    return { ...this.detalhes, ...ajustes.detalhes };
   }
 
   get orcamento(): number {
@@ -233,5 +284,6 @@ export class Projeto implements Visitavel {
 
   private static validarOrcamento(orcamento: number): void {
     garantir(Number.isFinite(orcamento) && orcamento > 0, 'Orçamento deve ser maior que zero.');
+    garantir(orcamento <= ORCAMENTO_MAXIMO, `Orçamento deve ser de no máximo ${ORCAMENTO_MAXIMO}.`);
   }
 }

@@ -17,6 +17,7 @@ import {
   AnaliseResposta,
   AuditoriaResposta,
   CorpoCriarProjeto,
+  CorpoDetalhes,
   CorpoReavaliacao,
   CorpoRodada,
   CorpoSubstituicao,
@@ -60,7 +61,6 @@ export function rotasProjetos(casos: CasosDeUso): FastifyPluginAsyncTypebox {
         const rodada = await casos.criarProjeto.executar(
           {
             ...corpo,
-            tipoCaptacao: corpo.tipoCaptacao,
             dataInicio: new Date(corpo.dataInicio),
             dataEntrega: new Date(corpo.dataEntrega),
             requisitos: corpo.requisitos.map((requisito) => ({
@@ -165,6 +165,27 @@ export function rotasProjetos(casos: CasosDeUso): FastifyPluginAsyncTypebox {
             : {}),
         };
       },
+    );
+
+    app.patch(
+      '/projetos/:projetoId/detalhes',
+      {
+        schema: {
+          tags: ['projetos'],
+          summary: 'Completa ou corrige os detalhes específicos do tipo do projeto',
+          params: ParamsProjeto,
+          body: CorpoDetalhes,
+          response: { 200: ProjetoResposta, ...erros },
+        },
+      },
+      async (requisicao) =>
+        apresentarProjeto(
+          await casos.ajustarDetalhes.executar(
+            requisicao.params.projetoId,
+            requisicao.body.detalhes,
+            contextoDe(requisicao),
+          ),
+        ),
     );
 
     app.post(

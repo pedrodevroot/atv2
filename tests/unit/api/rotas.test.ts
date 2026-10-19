@@ -129,7 +129,17 @@ describe('API REST (repositórios em memória)', () => {
     });
 
     expect(resposta.json()).toMatchObject({
-      validacao: { valido: true, problemas: [] },
+      validacao: {
+        valido: true,
+        problemas: [
+          {
+            codigo: 'COMPETENCIA_DO_TIPO',
+            severidade: 'ALERTA',
+            papel: 'DIRETOR',
+            profissionalId: IDS_DEMONSTRACAO.DIRETORA_CONSAGRADA,
+          },
+        ],
+      },
       relatorio: expect.stringContaining('# Relatório do projeto "Vozes do Sertão"') as string,
     });
   });

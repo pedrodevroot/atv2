@@ -1,6 +1,8 @@
-import { OrquestradorPadrao } from '../../src/application/orchestration/orquestrador-padrao.js';
-import { OrquestradorSubstituicao } from '../../src/application/orchestration/orquestrador-substituicao.js';
 import { AtualizadorComposicao } from '../../src/application/observers/atualizador-composicao.js';
+import type { Relogio } from '../../src/application/ports/relogio.js';
+import { CatalogoModelos } from '../../src/application/prototipos/catalogo-modelos.js';
+import { criarModelosPadrao } from '../../src/application/prototipos/modelos-padrao.js';
+import { SistemaRecomendacao } from '../../src/application/sistema-recomendacao.js';
 import { resolverParametros } from '../../src/application/strategies/parametros-recomendacao.js';
 import { criarCasosDeUso } from '../../src/application/use-cases/casos-de-uso.js';
 import { ConsultarSaude } from '../../src/application/use-cases/consultar-saude.js';
@@ -9,6 +11,7 @@ import {
   criarCanaisSaida,
   criarObservadores,
   criarRegistroEstrategias,
+  criarRegistroFabricas,
   registrarObservadores,
 } from '../../src/container.js';
 import type { Profissional } from '../../src/domain/entidades/profissional.js';
@@ -32,23 +35,27 @@ export async function criarAppMemoria(cadastro: readonly Profissional[] = cadast
   return { app, ...ambiente };
 }
 
-export function criarCasosMemoria(cadastro: readonly Profissional[] = cadastroDaApi()) {
+export function criarCasosMemoria(
+  cadastro: readonly Profissional[] = cadastroDaApi(),
+  relogio: Relogio = relogioFixo,
+) {
   const profissionais = new RepositorioProfissionaisMemoria(cadastro);
-  const projetos = new RepositorioProjetosMemoria();
   const barramento = new BarramentoEventosEmMemoria();
   const canais = criarCanaisSaida();
   const estrategias = criarRegistroEstrategias();
+  const fabricas = criarRegistroFabricas({ caixa: canais.caixa });
+  const projetos = new RepositorioProjetosMemoria(fabricas);
   const parametros = resolverParametros();
   const recomendacoes = new RepositorioRecomendacoesMemoria();
-  const orquestradorSubstituicao = new OrquestradorSubstituicao(profissionais, relogioFixo);
-  const atualizador = new AtualizadorComposicao({
-    projetos,
-    recomendacoes,
-    substituicao: orquestradorSubstituicao,
+  const sistema = new SistemaRecomendacao({
+    repositorio: profissionais,
+    fabricas,
     estrategias,
-    parametros,
     sujeito: barramento,
+    parametros,
+    relogio,
   });
+  const atualizador = new AtualizadorComposicao({ projetos, recomendacoes, sistema });
   registrarObservadores(barramento, criarObservadores({ canais, atualizador }));
   const casos = criarCasosDeUso(
     {
@@ -56,11 +63,11 @@ export function criarCasosMemoria(cadastro: readonly Profissional[] = cadastroDa
       convites: new RepositorioConvitesMemoria(),
       recomendacoes,
       estrategias,
+      fabricas,
+      modelos: new CatalogoModelos(criarModelosPadrao(fabricas)),
+      sistema,
       parametros,
-      orquestradorPadrao: new OrquestradorPadrao(profissionais, relogioFixo),
-      orquestradorSubstituicao,
-      sujeito: barramento,
-      relogio: relogioFixo,
+      relogio,
     },
     {
       auditoria: {
@@ -72,7 +79,7 @@ export function criarCasosMemoria(cadastro: readonly Profissional[] = cadastroDa
       mensagens: { mensagensDe: (id) => Promise.resolve([...canais.caixa.mensagensDe(id)]) },
     },
   );
-  return { casos, barramento, canais };
+  return { casos, barramento, canais, sistema, fabricas, projetos };
 }
 
 export function corpoProjetoDemonstracao(sobrescritas: Record<string, unknown> = {}) {

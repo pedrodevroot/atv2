@@ -1,7 +1,11 @@
 import type { Logger as Pino } from 'pino';
 import type { DataSource } from 'typeorm';
-import { OrquestradorPadrao } from './application/orchestration/orquestrador-padrao.js';
-import { OrquestradorSubstituicao } from './application/orchestration/orquestrador-substituicao.js';
+import { FabricaAnimacao } from './application/familias/animacao/fabrica-animacao.js';
+import { FabricaDocumentario } from './application/familias/documentario/fabrica-documentario.js';
+import type { DependenciasFabrica } from './application/familias/fabrica-projeto.js';
+import { FabricaFiccao } from './application/familias/ficcao/fabrica-ficcao.js';
+import { FabricaPublicitario } from './application/familias/publicitario/fabrica-publicitario.js';
+import { RegistroFabricas } from './application/familias/registro-fabricas.js';
 import { AtualizadorComposicao } from './application/observers/atualizador-composicao.js';
 import { AuditoriaRecomendacao } from './application/observers/auditoria-recomendacao.js';
 import { NotificadorEmail } from './application/observers/notificador-email.js';
@@ -15,6 +19,9 @@ import type {
 } from './application/ports/canais-saida.js';
 import type { Logger } from './application/ports/logger.js';
 import type { Observador, Sujeito } from './application/ports/observador.js';
+import { CatalogoModelos } from './application/prototipos/catalogo-modelos.js';
+import { criarModelosPadrao } from './application/prototipos/modelos-padrao.js';
+import { SistemaRecomendacao } from './application/sistema-recomendacao.js';
 import { FiltragemColaborativa } from './application/strategies/filtragem-colaborativa.js';
 import {
   resolverParametros,
@@ -24,6 +31,7 @@ import { RegistroEstrategias } from './application/strategies/registro-estrategi
 import { RegrasOrcamento } from './application/strategies/regras-orcamento.js';
 import { SimilaridadeCosseno } from './application/strategies/similaridade-cosseno.js';
 import { relogioDoSistema, type Relogio } from './application/ports/relogio.js';
+import { ORIGEM_EXPIRACAO } from './application/use-cases/casos-equipe.js';
 import { criarCasosDeUso } from './application/use-cases/casos-de-uso.js';
 import { ConsultarSaude } from './application/use-cases/consultar-saude.js';
 import type { DependenciasApi } from './app.js';
@@ -78,13 +86,14 @@ export interface Container extends DependenciasApi {
   readonly conexao: ConexaoBanco;
   readonly parametros: ParametrosRecomendacao;
   readonly registroEstrategias: RegistroEstrategias;
+  readonly registroFabricas: RegistroFabricas;
+  readonly modelos: CatalogoModelos;
+  readonly sistema: SistemaRecomendacao;
   readonly repositorioProfissionais: RepositorioProfissionaisTypeorm;
   readonly cadastroProfissionais: RepositorioProfissionaisResiliente;
   readonly repositorioProjetos: RepositorioProjetosTypeorm;
   readonly repositorioConvites: RepositorioConvitesTypeorm;
   readonly repositorioRecomendacoes: RepositorioRecomendacoesTypeorm;
-  readonly orquestradorPadrao: OrquestradorPadrao;
-  readonly orquestradorSubstituicao: OrquestradorSubstituicao;
   readonly barramento: BarramentoEventosEmMemoria;
   readonly canais: CanaisSaidaContainer;
   encerrar(): Promise<void>;
@@ -95,6 +104,15 @@ export function criarRegistroEstrategias(): RegistroEstrategias {
     new SimilaridadeCosseno(),
     new FiltragemColaborativa(),
     new RegrasOrcamento(),
+  ]);
+}
+
+export function criarRegistroFabricas(dependencias: DependenciasFabrica): RegistroFabricas {
+  return new RegistroFabricas([
+    new FabricaDocumentario(dependencias),
+    new FabricaAnimacao(dependencias),
+    new FabricaPublicitario(dependencias),
+    new FabricaFiccao(dependencias),
   ]);
 }
 
@@ -116,7 +134,7 @@ export function criarObservadores({ canais, atualizador }: DependenciasObservado
   return [
     new NotificadorEmail(canais.email),
     new NotificadorInterno(canais.caixa),
-    new AuditoriaRecomendacao(canais.auditoria, new Set([atualizador.nome])),
+    new AuditoriaRecomendacao(canais.auditoria, new Set([atualizador.nome, ORIGEM_EXPIRACAO])),
     atualizador,
     new PublicadorIntegracao(canais.publicador),
   ];
@@ -158,11 +176,21 @@ export function criarContainer(
     new VerificadorBanco(dataSource, undefined, conexao),
     cadastroProfissionais,
   ]);
-  const repositorioProjetos = new RepositorioProjetosTypeorm(dataSource, repositorioProfissionais);
+  const canais: CanaisSaidaContainer = {
+    email: new ServicoEmailSimulado(logger),
+    caixa: new CaixaMensagensTypeorm(dataSource),
+    auditoria: new RegistroAuditoriaTypeorm(dataSource, logger),
+    publicador: new PublicadorExternoMemoria(logger),
+  };
+  const registroFabricas = criarRegistroFabricas({ caixa: canais.caixa });
+  const modelos = new CatalogoModelos(criarModelosPadrao(registroFabricas));
+  const repositorioProjetos = new RepositorioProjetosTypeorm(
+    dataSource,
+    repositorioProfissionais,
+    registroFabricas,
+  );
   const repositorioConvites = new RepositorioConvitesTypeorm(dataSource);
   const repositorioRecomendacoes = new RepositorioRecomendacoesTypeorm(dataSource);
-  const orquestradorPadrao = new OrquestradorPadrao(cadastroProfissionais, relogio);
-  const orquestradorSubstituicao = new OrquestradorSubstituicao(cadastroProfissionais, relogio);
   const barramento = new BarramentoEventosEmMemoria((falha) => {
     logger.error(
       {
@@ -174,19 +202,18 @@ export function criarContainer(
       'Observador falhou ao processar evento',
     );
   });
-  const canais: CanaisSaidaContainer = {
-    email: new ServicoEmailSimulado(logger),
-    caixa: new CaixaMensagensTypeorm(dataSource),
-    auditoria: new RegistroAuditoriaTypeorm(dataSource, logger),
-    publicador: new PublicadorExternoMemoria(logger),
-  };
+  const sistema = new SistemaRecomendacao({
+    repositorio: cadastroProfissionais,
+    fabricas: registroFabricas,
+    estrategias: registroEstrategias,
+    sujeito: barramento,
+    parametros,
+    relogio,
+  });
   const atualizador = new AtualizadorComposicao({
     projetos: repositorioProjetos,
     recomendacoes: repositorioRecomendacoes,
-    substituicao: orquestradorSubstituicao,
-    estrategias: registroEstrategias,
-    parametros,
-    sujeito: barramento,
+    sistema,
   });
   registrarObservadores(barramento, criarObservadores({ canais, atualizador }));
   const casos = criarCasosDeUso(
@@ -195,10 +222,10 @@ export function criarContainer(
       convites: repositorioConvites,
       recomendacoes: repositorioRecomendacoes,
       estrategias: registroEstrategias,
+      fabricas: registroFabricas,
+      modelos,
+      sistema,
       parametros,
-      orquestradorPadrao,
-      orquestradorSubstituicao,
-      sujeito: barramento,
       relogio,
     },
     { auditoria: canais.auditoria, mensagens: canais.caixa },
@@ -213,13 +240,14 @@ export function criarContainer(
     consultarSaude,
     parametros,
     registroEstrategias,
+    registroFabricas,
+    modelos,
+    sistema,
     repositorioProfissionais,
     cadastroProfissionais,
     repositorioProjetos,
     repositorioConvites,
     repositorioRecomendacoes,
-    orquestradorPadrao,
-    orquestradorSubstituicao,
     barramento,
     canais,
     async encerrar() {

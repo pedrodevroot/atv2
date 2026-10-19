@@ -6,6 +6,8 @@ export const EVENTOS_NOTIFICAVEIS: readonly TipoEvento[] = [
   'CONVITE_ENVIADO',
   'CONVITE_ACEITO',
   'CONVITE_RECUSADO',
+  'CONVITE_EXPIRADO',
+  'SUBSTITUICAO_INDISPONIVEL',
   'EQUIPE_FORMADA',
 ];
 
@@ -51,7 +53,31 @@ export function comporNotificacoes(evento: EventoRecomendacao): Notificacao[] {
           evento.dados.produtorId,
           'PRODUTOR',
           `Convite recusado para ${evento.dados.papel}`,
-          `O profissional ${evento.dados.profissionalId} recusou o convite. Uma nova rodada de recomendações para ${evento.dados.papel} foi iniciada.`,
+          `O profissional ${evento.dados.profissionalId} recusou o convite. O sistema vai buscar um substituto para ${evento.dados.papel}.`,
+        ),
+      ];
+    case 'CONVITE_EXPIRADO':
+      return [
+        para(
+          evento.dados.produtorId,
+          'PRODUTOR',
+          `Convite expirado para ${evento.dados.papel}`,
+          `O profissional ${evento.dados.profissionalId} não respondeu ao convite do projeto ${evento.dados.projetoId} no prazo. O sistema vai buscar um substituto para ${evento.dados.papel}.`,
+        ),
+        para(
+          evento.dados.profissionalId,
+          'PROFISSIONAL',
+          `Convite expirado para ${evento.dados.papel}`,
+          `O prazo para responder ao convite do projeto ${evento.dados.projetoId} terminou.`,
+        ),
+      ];
+    case 'SUBSTITUICAO_INDISPONIVEL':
+      return [
+        para(
+          evento.dados.produtorId,
+          'PRODUTOR',
+          `Sem substituto automático para ${evento.dados.papel}`,
+          `Não foi possível iniciar a nova rodada para ${evento.dados.papel} no projeto ${evento.dados.projetoId}: ${evento.dados.motivo} Escolha um substituto ou ajuste o projeto.`,
         ),
       ];
     case 'EQUIPE_FORMADA':
@@ -74,6 +100,7 @@ export function comporNotificacoes(evento: EventoRecomendacao): Notificacao[] {
     case 'SUBSTITUICAO_SOLICITADA':
     case 'MEMBRO_REJEITADO':
     case 'REAVALIACAO_SOLICITADA':
+    case 'DETALHES_ATUALIZADOS':
       return [];
   }
 }

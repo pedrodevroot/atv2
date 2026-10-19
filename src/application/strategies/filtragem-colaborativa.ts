@@ -45,9 +45,11 @@ export class FiltragemColaborativa implements EstrategiaRecomendacao {
               similares += 1;
             }
           }
+          const pesoTotal = configuracao.pesoPriori + somaPesos;
           const mediaBayesiana =
-            (configuracao.pesoPriori * configuracao.mediaPriori + somaNotas) /
-            (configuracao.pesoPriori + somaPesos);
+            pesoTotal === 0
+              ? configuracao.mediaPriori
+              : (configuracao.pesoPriori * configuracao.mediaPriori + somaNotas) / pesoTotal;
           return { mediaBayesiana, similares };
         };
         return {

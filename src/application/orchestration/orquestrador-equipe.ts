@@ -5,6 +5,7 @@ import type { Projeto } from '../../domain/entidades/projeto.js';
 import { Recomendacao } from '../../domain/entidades/recomendacao.js';
 import type { Papel } from '../../domain/enums/papel.js';
 import { ErroAplicacao } from '../erros/erro-aplicacao.js';
+import type { FabricaProjeto } from '../familias/fabrica-projeto.js';
 import { relogioDoSistema, type Relogio } from '../ports/relogio.js';
 import type {
   CriteriosBusca,
@@ -34,9 +35,13 @@ export const ORDEM_ETAPAS: readonly EtapaOrquestracao[] = Object.values(EtapaOrq
 
 export interface EntradaOrquestracao {
   readonly projeto: Projeto;
-  readonly estrategia: EstrategiaRecomendacao;
+  readonly estrategia?: EstrategiaRecomendacao;
   readonly parametros: ParametrosRecomendacao;
 }
+
+export type EntradaResolvida<TEntrada extends EntradaOrquestracao> = TEntrada & {
+  readonly estrategia: EstrategiaRecomendacao;
+};
 
 export interface ResultadoMontagem {
   readonly equipes: readonly Equipe[];
@@ -44,6 +49,7 @@ export interface ResultadoMontagem {
 }
 
 export interface ResultadoOrquestracao {
+  readonly estrategia: string;
   readonly equipes: readonly Equipe[];
   readonly ranking: RankingPorPapel;
   readonly recomendacoes: readonly Recomendacao[];
@@ -59,6 +65,7 @@ export abstract class OrquestradorEquipe<
 > {
   constructor(
     protected readonly repositorio: RepositorioProfissionais,
+    protected readonly fabrica: FabricaProjeto,
     protected readonly relogio: Relogio = relogioDoSistema,
   ) {
     if (this.orquestrar !== OrquestradorEquipe.prototype.orquestrar) {
@@ -69,7 +76,11 @@ export abstract class OrquestradorEquipe<
     }
   }
 
-  async orquestrar(entrada: TEntrada): Promise<ResultadoOrquestracao> {
+  async orquestrar(pedido: TEntrada): Promise<ResultadoOrquestracao> {
+    const entrada: EntradaResolvida<TEntrada> = {
+      ...pedido,
+      estrategia: pedido.estrategia ?? this.fabrica.criarRecomendador(),
+    };
     const etapas: EtapaOrquestracao[] = [];
     const executar = <T>(etapa: EtapaOrquestracao, acao: () => T): T => {
       etapas.push(etapa);
@@ -77,6 +88,7 @@ export abstract class OrquestradorEquipe<
     };
 
     executar(EtapaOrquestracao.VALIDAR, () => {
+      this.validarRegrasDoTipo(entrada);
       this.validarRestricoes(entrada);
     });
     const busca = await executar(EtapaOrquestracao.BUSCAR, () => this.buscarCandidatos(entrada));
@@ -100,6 +112,7 @@ export abstract class OrquestradorEquipe<
       .map(([papel]) => papel);
 
     return {
+      estrategia: entrada.estrategia.nome,
       equipes: montagem.equipes,
       ranking: refinado,
       recomendacoes,
@@ -115,28 +128,35 @@ export abstract class OrquestradorEquipe<
     };
   }
 
-  protected abstract validarRestricoes(entrada: TEntrada): void;
+  protected abstract validarRestricoes(entrada: EntradaResolvida<TEntrada>): void;
 
-  protected abstract criteriosDeBusca(entrada: TEntrada): CriteriosBusca;
+  protected abstract criteriosDeBusca(entrada: EntradaResolvida<TEntrada>): CriteriosBusca;
 
   protected abstract normalizarDados(
-    entrada: TEntrada,
+    entrada: EntradaResolvida<TEntrada>,
     profissionais: readonly Profissional[],
   ): Profissional[];
 
-  protected abstract posProcessar(entrada: TEntrada, ranking: RankingPorPapel): RankingPorPapel;
+  protected abstract posProcessar(
+    entrada: EntradaResolvida<TEntrada>,
+    ranking: RankingPorPapel,
+  ): RankingPorPapel;
 
   protected abstract montarEquipes(
-    entrada: TEntrada,
+    entrada: EntradaResolvida<TEntrada>,
     ranking: RankingPorPapel,
     rodada: number,
   ): ResultadoMontagem;
 
-  protected buscarCandidatos(entrada: TEntrada): Promise<ResultadoBusca> {
+  protected buscarCandidatos(entrada: EntradaResolvida<TEntrada>): Promise<ResultadoBusca> {
     return this.repositorio.buscarCandidatos(this.criteriosDeBusca(entrada));
   }
 
-  protected rodadaDe(entrada: TEntrada): number {
+  protected exigeRegrasDoTipo(): boolean {
+    return true;
+  }
+
+  protected rodadaDe(entrada: EntradaResolvida<TEntrada>): number {
     return 1 + Math.max(0, ...entrada.projeto.equipes.map((equipe) => equipe.rodada));
   }
 
@@ -175,12 +195,27 @@ export abstract class OrquestradorEquipe<
     throw new ErroAplicacao('RESTRICAO_VIOLADA', mensagem);
   }
 
-  private ranquear(entrada: TEntrada, candidatos: readonly Profissional[]): RankingPorPapel {
+  private validarRegrasDoTipo(entrada: EntradaResolvida<TEntrada>): void {
+    if (!this.exigeRegrasDoTipo()) {
+      return;
+    }
+    const erros = entrada.projeto
+      .aceitar(this.fabrica.criarValidador())
+      .problemas.filter((problema) => problema.severidade === 'ERRO');
+    if (erros.length > 0) {
+      this.violacao(erros.map((problema) => problema.mensagem).join(' '));
+    }
+  }
+
+  private ranquear(
+    entrada: EntradaResolvida<TEntrada>,
+    candidatos: readonly Profissional[],
+  ): RankingPorPapel {
     return entrada.estrategia.recomendar(entrada.projeto, candidatos, entrada.parametros);
   }
 
   private registrarRecomendacoes(
-    entrada: TEntrada,
+    entrada: EntradaResolvida<TEntrada>,
     ranking: RankingPorPapel,
     rodada: number,
   ): Recomendacao[] {
